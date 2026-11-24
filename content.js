@@ -1302,7 +1302,7 @@
   };
 
   // ---------- marking ----------
-  let mark = null;
+  let mark = null, markVid = null;                    // the start mark belongs to one stream
   let creating = false, createNow = null;
   const updateCreateNow = () => { const v = V(); if (createNow && v) createNow.textContent = fmt(v.currentTime); };
   const startCreate = () => {
@@ -1314,11 +1314,12 @@
   const markStart = () => {
     const v = V(); if (!v || !vidNow()) { say('Open a video first.'); return; }
     if (P) stop(null);
-    creating = true; mark = v.currentTime; ui.tab = 'songs'; ui.min = false; toggle(true);
+    creating = true; mark = v.currentTime; markVid = vidNow(); ui.tab = 'songs'; ui.min = false; toggle(true);
     say(''); draw();
   };
   const markEnd = async () => {
     const v = V(); if (!v) return;
+    if (mark != null && markVid !== vidNow()) { mark = null; markVid = null; creating = true; ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say('The start was marked on a different stream. Mark the start again on this one.'); return; }
     if (mark == null) { creating = true; ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say('Mark the start first.'); return; }
     const e = v.currentTime;
     if (e <= mark) { say('The end must be after the start (' + fmt(mark) + ').'); return; }
@@ -1438,7 +1439,12 @@
     if (handled === location.href) return;
     handled = location.href;
     if (isOpen()) draw();
-    const here = vidNow(); if (!here) return;
+    const here = vidNow();
+    if (mark != null && markVid !== here) {               // a start marked on another stream can't be used here
+      mark = null; markVid = null;
+      if (creating) { say('You opened a different stream, so the start mark was cleared. Mark the start again here.'); if (isOpen()) draw(); }
+    }
+    if (!here) return;
     let pending = null;                                   // 1) a playlist opened this video
     try { pending = JSON.parse(sessionStorage.getItem(PLAY_KEY) || 'null'); } catch (err) {}
     if (pending) {
