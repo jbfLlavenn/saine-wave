@@ -9,15 +9,15 @@ Saine Wave is a free browser extension for Microsoft Edge (and Chrome). It works
 ## Features
 
 - **Save songs from any stream.** Press *New song*, mark the start and end while the video plays, and give it a name.
+- **Views go to the streamer.** Saine Wave always plays the original stream on YouTube, so every listen still counts as a view for the streamer.
 - **Loop or play through.** Repeat one song, repeat everything, or play once — like a normal music player.
-- **Playlists.** Mix songs from different streams. Saine Wave opens each stream at the right moment, so every play is a real view on the original video.
+- **Playlists.** Mix songs from different streams. Saine Wave opens each stream at the right moment.
 - **Lyrics on the video.** Lyrics are found automatically on [LRCLIB](https://lrclib.net), or you can paste your own (plain text, LRC or SRT).
 - **Romaji and English.** A second line under Japanese lyrics. Romaji is made on your computer; English uses the browser's built-in translator (Edge 148 or newer).
 - **Tap to sync.** For lyrics without timings, tap Space at the start of each line while the song plays.
 - **Sync between computers.** Songs and playlists are saved to your browser account, so they show up on every computer where you're signed in.
 - **Sharing.** Send a link that opens and loops a song, or share a whole playlist. Export and import backups as a file.
 - **Safe editing.** Song times are locked until you press *Edit times*, and most changes can be undone.
-- **Views go to the streamer.** Saine Wave always plays the original stream on YouTube, so every listen still counts as a view for the streamer.
 
 ## Install
 
