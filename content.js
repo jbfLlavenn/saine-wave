@@ -18,7 +18,9 @@
     const h = q('h1.ytd-watch-metadata yt-formatted-string') || q('h1.ytd-watch-metadata');
     return ((h && h.textContent.trim()) || document.title.replace(/ - YouTube$/, '').replace(/^\(\d+\) /, '')).slice(0, 120);
   };
-  const link = x => location.origin + '/watch?v=' + x.v + '&t=' + Math.floor(x.s) + 's&ls=' + x.s + '&le=' + x.e + '&ln=' + encodeURIComponent(x.n);
+  // a song link; LRCLIB lyrics, their offset and tap-sync timings ride along so the person you send it to sees them too
+  const link = x => location.origin + '/watch?v=' + x.v + '&t=' + Math.floor(x.s) + 's&ls=' + x.s + '&le=' + x.e + '&ln=' + encodeURIComponent(x.n)
+    + (x.li ? '&li=' + x.li + (x.lo ? '&lo=' + x.lo : '') + (x.tt && x.tt.length ? '&tt=' + x.tt.join('.') : '') : '');
   const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 
@@ -27,8 +29,9 @@
     name: 'Ginjo Saine', mark: '🎈',
     v: 'GVjhhSSSbLs', title: '【#銀城サイネ3D】おまたせ...！見ててくだサイネ。【ぶいすぽっ！/銀城サイネ 】',
     songs: [
-      { n: '♪ The Beginning / ONE OK ROCK', s: 87, e: 380 },
-      { n: '♪ 生きる / 水野あつ feat. 可不', s: 1501, e: 1642 }
+      { n: '♪ The Beginning / ONE OK ROCK', s: 87, e: 380, li: 33383217 },
+      { n: '♪ 生きる / 水野あつ feat. 可不', s: 1501.3, e: 1642.4, li: 23770907,
+        tt: [36, 70, 109, 156, 293, 334, 376, 421, 459, 499, 543, 586, 679, 695, 724, 766, 798, 845, 884, 928, 971, 1014, 1057, 1100, 1146, 1278, 1321] }
     ]
   };
 
@@ -970,6 +973,9 @@
     const keys = [];
     for (const x of FEATURED.songs) {
       const y = findSong(FEATURED.v, x.s, x.e) || await addSong(FEATURED.v, x.n, x.s, x.e, FEATURED.title);
+      if (x.li && !y.li && !y.lw && !LY[y.k]) {        // give the sample songs their lyrics, unless you already set your own
+        y.li = x.li; y.lo = 0; if (x.tt) y.tt = x.tt.slice(); await put(y);
+      }
       keys.push(y.k);
     }
     return keys;
@@ -1455,6 +1461,9 @@
     const a = Number(sp.get('ls')), b = Number(sp.get('le'));
     if (sp.get('ls') !== null && b > a) {
       const x = findSong(here, a, b) || await addSong(here, sp.get('ln') || 'Song', a, b, '');
+      const got = songIn([here, a, b, '', Number(sp.get('li')) || 0, Number(sp.get('lo')) || 0,
+        (sp.get('tt') || '').split('.').filter(Boolean).map(Number), '']);
+      if (got && got.li && !x.li && !x.lw && !LY[x.k]) { x.li = got.li; if (got.lo) x.lo = got.lo; if (got.tt) x.tt = got.tt; await put(x); }
       if (!x.t) whenReady(() => { setTimeout(() => { const t = videoTitle(); if (t) { x.t = t; put(x); } }, 1500); });
       toggle(true); playOne(x); return;
     }
