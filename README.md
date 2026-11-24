@@ -6,6 +6,16 @@ Saine Wave is a free browser extension for Microsoft Edge (and Chrome). It works
 
 > Fan-made and unofficial. Not affiliated with or endorsed by VSPO!, Bitstar, Ginjo Saine or YouTube.
 
+## Calling fan artists 🎨
+
+The current icon is a placeholder. If you'd like to draw a Saine icon for Saine Wave, I'd love to use it as the default icon, with full credit and a link to your profile here in the README.
+
+- A square image, 512×512 or larger, that still reads well when tiny (it's shown at 16×16 in the toolbar)
+- Original fan art only (no stream screenshots or official art), following VSPO!'s fan art guidelines
+- Saine Wave is free and non-commercial
+
+If you're interested, [open an issue](../../issues) and say hi!
+
 ## Features
 
 - **Save songs from any stream.** Press *New song*, mark the start and end while the video plays, and give it a name.
@@ -62,16 +72,6 @@ Saine Wave has no server and collects nothing. See [PRIVACY.md](PRIVACY.md).
 - Japanese word splitting for romaji: [kuromoji.js](https://github.com/takuyaa/kuromoji.js) (Apache License 2.0) with the mecab-ipadic dictionary — see `KUROMOJI-LICENSE.txt` and `KUROMOJI-NOTICE.md`.
 - Icons: [Material Symbols](https://fonts.google.com/icons) (Apache License 2.0).
 - Theme colors are inspired by Ginjo Saine's outfit.
-
-## Calling fan artists 🎨
-
-The current icon is a placeholder. If you'd like to draw a Saine icon for Saine Wave, I'd love to use it as the default icon, with full credit and a link to your profile here in the README.
-
-- A square image, 512×512 or larger, that still reads well when tiny (it's shown at 16×16 in the toolbar)
-- Original fan art only (no stream screenshots or official art), following VSPO!'s fan art guidelines
-- Saine Wave is free and non-commercial
-
-If you're interested, [open an issue](../../issues) and say hi!
 
 ## License
 
