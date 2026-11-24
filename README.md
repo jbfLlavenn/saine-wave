@@ -75,8 +75,9 @@ Saine Wave has no server and collects nothing. See [PRIVACY.md](PRIVACY.md).
 - Lyrics: [LRCLIB](https://lrclib.net), a free, community-made lyrics database.
 - Japanese word splitting for romaji: [kuromoji.js](https://github.com/takuyaa/kuromoji.js) (Apache License 2.0) with the mecab-ipadic dictionary — see `KUROMOJI-LICENSE.txt` and `KUROMOJI-NOTICE.md`.
 - Icons: [Material Symbols](https://fonts.google.com/icons) (Apache License 2.0).
+- Balloon in the app icon: [Microsoft Fluent Emoji](https://github.com/microsoft/fluentui-emoji) (MIT License) — see `FLUENT-EMOJI-LICENSE.txt`.
 - Theme colors are inspired by Ginjo Saine's outfit.
 
 ## License
 
-Saine Wave's own code is released under the [MIT License](LICENSE). The bundled kuromoji.js and its dictionary keep their own licenses, listed above.
+Saine Wave's own code is released under the [MIT License](LICENSE). The bundled kuromoji.js and its dictionary, and the Fluent Emoji balloon, keep their own licenses, listed above.
