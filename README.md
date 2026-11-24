@@ -4,7 +4,7 @@ Save the songs from YouTube singing streams, loop them, and play them as playlis
 
 Saine Wave is a free browser extension for Microsoft Edge (and Chrome). It works with any YouTube stream or video. It's named after and made with love for **Ginjo Saine (銀城サイネ) of VSPO!**, whose 3D live is featured on the welcome screen.
 
-> Fan-made and unofficial. Not affiliated with or endorsed by VSPO!, Bitstar, Ginjo Saine or YouTube.
+> Fan-made and unofficial. Not affiliated with or endorsed by VSPO! or its operator, Ginjo Saine or YouTube.
 
 ## Calling fan artists 🎨
 
