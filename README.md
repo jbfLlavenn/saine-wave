@@ -8,11 +8,15 @@ Saine Wave is a free browser extension for Microsoft Edge (and Chrome). It works
 
 ## Calling fan artists 🎨
 
-The current icon is a placeholder. If you'd like to draw a Saine icon for Saine Wave, I'd love to use it as the default icon, with full credit and a link to your profile here in the README.
+The current icon is a placeholder. I'm looking for a fan artist who'd like to draw a Saine icon for Saine Wave, **as a free contribution**. Saine Wave is a free, non-commercial fan project, so I can't pay for artwork, but in return:
+
+- **You'll be credited** by name, with a link to your profile (X, Pixiv, etc.), in the README and the extension's credits
+- Your art becomes the default icon everyone sees in their browser toolbar
+
+What I'm looking for:
 
 - A square image, 512×512 or larger, that still reads well when tiny (it's shown at 16×16 in the toolbar)
 - Original fan art only (no stream screenshots or official art), following VSPO!'s fan art guidelines
-- Saine Wave is free and non-commercial
 
 If you're interested, [open an issue](../../issues) and say hi!
 
