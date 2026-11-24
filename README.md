@@ -63,6 +63,16 @@ Saine Wave has no server and collects nothing. See [PRIVACY.md](PRIVACY.md).
 - Icons: [Material Symbols](https://fonts.google.com/icons) (Apache License 2.0).
 - Theme colors are inspired by Ginjo Saine's outfit.
 
+## Calling fan artists 🎨
+
+The current icon is a placeholder. If you'd like to draw a Saine icon for Saine Wave, I'd love to use it as the default icon, with full credit and a link to your profile here in the README.
+
+- A square image, 512×512 or larger, that still reads well when tiny (it's shown at 16×16 in the toolbar)
+- Original fan art only (no stream screenshots or official art), following VSPO!'s fan art guidelines
+- Saine Wave is free and non-commercial
+
+Open an [issue](../../issues) or message me on GitHub if you're interested!
+
 ## License
 
 Saine Wave's own code is released under the [MIT License](LICENSE). The bundled kuromoji.js and its dictionary keep their own licenses, listed above.
