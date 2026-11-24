@@ -71,7 +71,7 @@ The current icon is a placeholder. If you'd like to draw a Saine icon for Saine 
 - Original fan art only (no stream screenshots or official art), following VSPO!'s fan art guidelines
 - Saine Wave is free and non-commercial
 
-Open an [issue](../../issues) or message me on GitHub if you're interested!
+If you're interested, [open an issue](../../issues) and say hi!
 
 ## License
 
