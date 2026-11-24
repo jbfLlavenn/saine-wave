@@ -10,7 +10,7 @@ Saine Wave is a free browser extension for Microsoft Edge (and Chrome). It works
 
 The current icon is a placeholder. I'm looking for a fan artist who'd like to draw a Saine icon for Saine Wave, **as a free contribution**. Saine Wave is a free, non-commercial fan project, so I can't pay for artwork, but in return:
 
-- **You'll be credited** by name, with a link to your profile (X, Pixiv, etc.), in the README and the extension's credits
+- **You'll be credited** by name, with a link to your profile (X, Pixiv, etc.), in the README and in the extension's Settings
 - Your art becomes the default icon everyone sees in their browser toolbar
 
 What I'm looking for:
