@@ -17,8 +17,7 @@ Saine Wave is a free browser extension for Microsoft Edge (and Chrome). It works
 - **Sync between computers.** Songs and playlists are saved to your browser account, so they show up on every computer where you're signed in.
 - **Sharing.** Send a link that opens and loops a song, or share a whole playlist. Export and import backups as a file.
 - **Safe editing.** Song times are locked until you press *Edit times*, and most changes can be undone.
-
-*Side note: Saine Wave always plays the original stream on YouTube, so every listen still counts as a view for the streamer.*
+- **Views go to the streamer.** Saine Wave always plays the original stream on YouTube, so every listen still counts as a view for the streamer.
 
 ## Install
 
