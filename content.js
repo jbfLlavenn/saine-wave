@@ -1030,7 +1030,8 @@
           .forEach(([k, d]) => { const row = el('div', 'krow'); row.append(el('kbd', '', k), el('span', '', d)); t.append(row); });
         return t; })()),
       (() => { const r = el('div', 'acts welcomeagain'); r.append(tbtn('act', null, 'Show the welcome screen', () => { ui.tab = 'welcome'; draw(); })); return r; })(),
-      el('div', 'setnote ver', 'Saine Wave ' + chrome.runtime.getManifest().version));
+      el('div', 'setnote ver', 'Saine Wave ' + chrome.runtime.getManifest().version),
+      el('div', 'setnote ver', 'Lyrics from LRCLIB'));
   };
 
   const empty = (name, text) => { const d = el('div', 'empty'); d.append(icon(name), text); return d; };
