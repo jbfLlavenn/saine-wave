@@ -1585,8 +1585,8 @@
   const seek = (v, t) => { v.currentTime = t; last = t; };
   const whenReady = (fn, tries = 0) => {
     const v = V();
-    if (v && v.readyState >= 1 && vidNow()) fn(v);
-    else if (tries < 60) setTimeout(() => whenReady(fn, tries + 1), 250);
+    if (v && v.readyState >= 1 && vidNow() && !q('.ad-showing')) fn(v);    // wait for ads to finish, too
+    else if (tries < 480) setTimeout(() => whenReady(fn, tries + 1), 250);  // up to 2 minutes (slow loads, long ads)
   };
   const stop = msg => {
     if (SY) { SY = null; setTimeout(drawSyncBar, 0); }
@@ -1605,6 +1605,7 @@
       return;
     }
     delete P.resume;
+    draw();                                     // show the song right away, even while the video is still loading
     whenReady(v => { seek(v, from); v.play().catch(() => {}); say(''); draw(); });
   };
   const playOne = x => { clearTimeout(waiting); waiting = null; P = { mode: 'one', list: [x.k], i: 0, rep: 1, r: 1, g: 0 }; start(); };
