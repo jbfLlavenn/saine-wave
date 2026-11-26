@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Saine Wave",
-  "version": "1.17.0",
+  "version": "1.17.2",
   "description": "Clip the songs from YouTube streams, loop them, and play them as playlists. Your songs sync through your browser account.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApp0aEt9e3CzXTg4WH1wdv/hz1s5ldd4UKCMBTUF7kOVYFZDBP9jTE9lV7Ou7RpIdvL4y3Nl1VdVtHwsJ6P+CsWOO+FsUIMa34ggM9KzYqtTEljkLAFHILnCp2XYkfTD4li+pc2vxZbRVBEnualy5V4I3caPE6wR9JZ+dp/LhNHXwYbOefOSxUMa9IRAa7sUrRDtcuWE6jO5Xfe4OP5QKHoCjk2pWyFbciZKsGK/ktlCfGAxFOrXFRrdUQBjv9bnT4AQmegAKSqNWMqFXSUhfMiTkKTtS81eeXG5rRgAtUVGwNq0zfaDjB2vdUWrLX/4vIpw+JGM+v+PkUWQ/c5r96wIDAQAB",
   "permissions": [

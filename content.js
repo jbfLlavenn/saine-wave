@@ -628,7 +628,14 @@
   const bar = el('div', 'bar'), barFill = el('i'); bar.append(barFill);
   const times = el('div', 'times'), tA = el('span'), tB = el('span'); times.append(tA, tB);
   const prevBtn = ibtn('prev', 'Previous song', () => prevSong());
-  const ppBtn = ibtn('pause', 'Pause', () => { const v = V(); if (!v) return; if (v.paused) v.play().catch(() => {}); else v.pause(); setTimeout(syncPP, 50); }, 'big');
+  const awayFromSong = () => { const x = P && cur(); return !!x && x.v !== vidNow(); };
+  const ppBtn = ibtn('pause', 'Pause', () => {
+    if (awayFromSong()) {                         // left the stream (e.g. went to the home page): go back and continue
+      const x = cur(); if (P.at && P.at.k === x.k) P.resume = P.at;
+      start(); return;
+    }
+    const v = V(); if (!v) return; if (v.paused) v.play().catch(() => {}); else v.pause(); setTimeout(syncPP, 50);
+  }, 'big');
   const nextBtn = ibtn('next', 'Next song', () => nextSong(true));
   const stopBtn = ibtn('stop', 'Stop', () => stop('Stopped.'));
   const OV_LABEL = { bottom: 'Lyrics on video: bottom', top: 'Lyrics on video: top', off: 'Lyrics on video: off' };
@@ -707,7 +714,7 @@
   };
 
   const setIcon = (b, name, label) => { b.firstChild.replaceWith(icon(name)); b.title = label; b.setAttribute('aria-label', label); };
-  const syncPP = () => { const v = V(); const playing = v && !v.paused; setIcon(ppBtn, playing ? 'pause' : 'play', playing ? 'Pause' : 'Play'); };
+  const syncPP = () => { const v = V(); const playing = v && !v.paused && !awayFromSong(); setIcon(ppBtn, playing ? 'pause' : 'play', playing ? 'Pause' : 'Play'); };
 
   // drag the panel by its header
   head.addEventListener('pointerdown', ev => {
@@ -1458,7 +1465,9 @@
       location.href = link(x);
       return;
     }
-    whenReady(v => { seek(v, x.s); v.play().catch(() => {}); say(''); draw(); });
+    const r = P.resume; delete P.resume;
+    const from = r && r.k === x.k && r.t >= x.s && r.t < x.e - 1 ? r.t : x.s;
+    whenReady(v => { seek(v, from); v.play().catch(() => {}); say(''); draw(); });
   };
   const playOne = x => { clearTimeout(waiting); waiting = null; P = { mode: 'one', list: [x.k], i: 0, rep: 1, r: 1, g: 0 }; start(); };
   const playList = (keys, o, name, plk) => {
@@ -1508,6 +1517,7 @@
     if (q('.ad-showing')) { updateOverlay(); return; }   // let ads play, hide lyrics meanwhile
     const t = v.currentTime, jumped = Math.abs(t - last) > 2;
     last = t;
+    if (t >= x.s && t < x.e) P.at = { k: x.k, t };      // where it is, so Play can continue here after leaving the stream
     if (jumped && (t < x.s - 1 || t > x.e)) { stop('Loop paused because you moved the slider.'); return; }
     if (t >= x.e && SY && SY.k === x.k) { v.pause(); syncFinish(); return; }
     if (t >= x.e) {
