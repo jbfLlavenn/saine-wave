@@ -1444,7 +1444,6 @@
   // P = { mode:'one'|'list', list:[song keys], i, rep, r, g, sh, name, plk }
   let P = null, last = -1, waiting = null;
   const PLAY_KEY = 'saineWavePlay';
-  let navBackup = null;
   const cur = () => P && S[P.list[P.i]];
   const seek = (v, t) => { v.currentTime = t; last = t; };
   const whenReady = (fn, tries = 0) => {
@@ -1465,12 +1464,10 @@
     if (x.v !== vidNow()) {                     // song is in another video: open it, then carry on
       sessionStorage.setItem(PLAY_KEY, JSON.stringify(P));
       say('Opening ' + x.n + '…');
-      document.dispatchEvent(new CustomEvent('saine-wave-nav', { detail: JSON.stringify({ v: x.v, t: from }) }));   // the way YouTube switches videos
-      clearTimeout(navBackup);
-      navBackup = setTimeout(() => { if (vidNow() !== x.v) location.href = link(x, from); }, 2500);   // backup: full reload
+      location.href = link(x, from);            // opens at the exact second (song start, or where it stopped)
       return;
     }
-    clearTimeout(navBackup); delete P.resume;
+    delete P.resume;
     whenReady(v => { seek(v, from); v.play().catch(() => {}); say(''); draw(); });
   };
   const playOne = x => { clearTimeout(waiting); waiting = null; P = { mode: 'one', list: [x.k], i: 0, rep: 1, r: 1, g: 0 }; start(); };
