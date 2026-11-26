@@ -6,31 +6,8 @@
   // ---------- helpers ----------
   const sync = chrome.storage.sync, local = chrome.storage.local;
   const q = s => document.querySelector(s);
-  // YouTube can have several videos on a page: the real player (also while it's shrunk into the mini player)
-  // and silent hover previews on thumbnails. Always use the real player.
-  const PREVIEW = 'ytd-video-preview, #video-preview, #inline-preview-player, ytd-thumbnail, ytd-rich-grid-media, ytd-reel-video-renderer, ytd-shorts';
-  const V = () => {
-    const vs = [...document.querySelectorAll('video')].filter(v => !v.closest(PREVIEW));
-    return vs.find(v => v.closest('#movie_player')) || vs.find(v => v.classList.contains('html5-main-video')) || null;
-  };
-  const miniOn = () => !!q('ytd-miniplayer[active], ytd-app[miniplayer-is-active]');
-  const playerVid = () => {                  // the video in the real player, read from its title link
-    const a = q('#movie_player a.ytp-title-link[href*="v="]');
-    try { return a ? new URL(a.href, location.href).searchParams.get('v') || '' : ''; } catch { return ''; }
-  };
-  let lastWatch = null;                      // the stream last seen on a watch page, to recognise it in the mini player
-  const vidNow = () => {
-    const v = V();
-    if (location.pathname === '/watch') {
-      const id = new URLSearchParams(location.search).get('v') || '';
-      if (id && v && v.currentSrc) lastWatch = { id, src: v.currentSrc };
-      return id;
-    }
-    if (!v) return '';
-    const r = v.getBoundingClientRect(); if (!r.width || !r.height) return '';   // mini player closed
-    if (lastWatch && v.currentSrc && v.currentSrc === lastWatch.src) return lastWatch.id;
-    return (miniOn() && playerVid()) || '';
-  };
+  const V = () => q('video.html5-main-video') || q('video');
+  const vidNow = () => (location.pathname === '/watch' && new URLSearchParams(location.search).get('v')) || '';
   const r1 = n => Math.round(n * 10) / 10;
   const fmt = n => {
     n = Math.max(0, Math.round(n));
