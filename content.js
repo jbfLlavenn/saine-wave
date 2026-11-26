@@ -561,8 +561,7 @@
   .draghandle{cursor:grab;touch-action:none;color:#bdbac6;flex:none;width:28px;margin-right:-4px}.draghandle:active{cursor:grabbing}
   .pllist.sorting{user-select:none}.pllist.sorting .song:not(.dragging){transition:transform .12s}
   .song.dragging{opacity:.95;outline:2px solid #A6D8F0;background:#2e3440;box-shadow:0 8px 20px rgba(0,0,0,.45);position:relative;z-index:3}
-  .rmchip{height:28px;padding:0 10px 0 6px;border-radius:14px;background:#3a2a32;color:#F4A6C1;font-size:12px;gap:4px;flex:none}
-  .rmchip svg{width:14px;height:14px}.rmchip:hover{background:#4a3340}
+  .rmx{flex:none;background:#3a2a32;color:#F4A6C1}.rmx svg{fill:#F4A6C1}.rmx:hover{background:#4a3340}
   .allbar{display:flex;align-items:center;gap:6px;margin:8px 0 2px;flex-wrap:wrap}
   .selhint{font-size:12px;color:#bdbac6;padding-left:2px}
   .song.sel .row{gap:8px}.song.chosen{background:#2e3440;outline:1px solid rgba(166,216,240,.45)}
@@ -1509,12 +1508,12 @@
           keepFocus = { k: x.k, until: Date.now() + 1500 }; reorder(keys, x);
         };
         h.onpointerdown = ev => startDrag(ev, h, list, x, reorder);
-        const rm = tbtn('rmchip', 'close', 'Remove', async () => {
+        const rm = ibtn('close', 'Remove ' + x.n + ' from this playlist', async () => {
           const at = p.list.indexOf(x.k); p.list = p.list.filter(k => k !== x.k); await put(p);
           say('Removed ' + x.n + ' from ' + p.n + '.', async () => { if (!p.list.includes(x.k)) p.list.splice(at, 0, x.k); await put(p); say('Put back.'); });
           draw();
-        });
-        rm.setAttribute('aria-label', 'Remove ' + x.n + ' from this playlist'); rm.title = 'Remove from this playlist (the song stays saved)';
+        }, 'sm rmx');
+        rm.title = 'Remove from this playlist (the song stays saved)';
         extra.push(rm);
         lead = h;
       }
