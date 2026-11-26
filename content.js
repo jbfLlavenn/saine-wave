@@ -257,7 +257,7 @@
     } catch (err) {
       failed[job] = h;
       say(mode === 'romaji' ? 'Could not prepare romaji: ' + (err.message || err) :
-        String(err.message) === 'nosupport' ? 'English translation needs Edge\'s built-in translator (Edge 148 or newer). Update Edge, or switch the second line back.' :
+        String(err.message) === 'nosupport' ? 'English translation needs Edge\'s built-in translator (Edge 148 or newer). Showing the original lyrics instead.' :
         'Could not translate: ' + (err.message || err));
     } finally { working.delete(job); }
   };
@@ -478,7 +478,12 @@
   .sethead{font-weight:600;font-size:13px;margin-bottom:8px}
   .setnote{font-size:12px;color:#8c8996;margin-top:6px}
   .setnote.ver{margin-top:12px;text-align:center}
-  .seg{display:flex;gap:4px;background:#25242c;border-radius:12px;padding:4px}
+  .seg{display:flex;gap:4px;background:#25242c;border-radius:12px;padding:4px;flex-wrap:wrap}
+  .seg .segbtn{min-width:64px}
+  .lmlabel{font-size:12px;color:#bdbac6;margin:8px 2px 4px}
+  .lyrmenu{margin-top:6px;padding:4px 8px 8px;border-radius:12px;background:rgba(30,30,36,.92)}
+  .lyrmenu.hidden{display:none}
+  .lyrmenu .segbtn{height:30px;font-size:12px}
   .segbtn{flex:1;height:34px;border-radius:9px;color:#bdbac6;font-size:13px}
   .segbtn:hover{background:#2e2d36;color:#fff}
   .segbtn.on{background:#58535E;color:#fff}
@@ -546,7 +551,18 @@
   .act{height:30px;padding:0 10px;border-radius:999px;font-size:12px;color:#d1cfd9;background:#2e2d36}
   .act:hover{background:#383641;color:#fff}.act svg{width:16px;height:16px}
   .act.danger:hover{background:rgba(244,166,193,.14);color:#F4A6C1}
-  .chooser{margin-top:8px;padding:8px;border-radius:10px;background:#1E1E24;display:flex;flex-wrap:wrap;gap:6px}
+  .picker{margin-top:8px;padding:8px;border-radius:10px;background:#1E1E24}
+  .pksearch{width:100%;box-sizing:border-box;height:32px;margin:6px 0;padding:0 10px;border-radius:8px;border:1px solid #3a3842;background:#25242c;color:#F2F4F8;font:inherit;font-size:13px}
+  .pksearch:focus{outline:2px solid #A6D8F0;outline-offset:-1px}
+  .pklist{max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;overscroll-behavior:contain}
+  .pkhead{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#8e8b98;margin:6px 4px 2px}
+  .pkrow{display:flex;align-items:center;gap:8px;min-height:34px;padding:0 8px;border-radius:8px;background:transparent;color:#dcdae3;font-size:13px;text-align:left;width:100%;flex:none}
+  .pkrow:hover{background:#2e2d36}.pkrow.on{color:#F5C84C}
+  .pkmark{width:18px;height:18px;display:flex;align-items:center;justify-content:center;flex:none}.pkmark svg{width:16px;height:16px}
+  .pkname{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pkcount{font-size:12px;color:#8e8b98;font-variant-numeric:tabular-nums}
+  .pknew{color:#A6D8F0}
+  .pkempty{font-size:12px;color:#8e8b98;padding:6px 4px}
   .chip{height:30px;padding:0 12px;border-radius:999px;background:#2e2d36;color:#dcdae3;font-size:12px}
   .chip:hover{background:#383641}.chip.on{background:#58535E;color:#F5C84C}
   .chip svg{width:16px;height:16px}
@@ -572,7 +588,8 @@
   .compact .head{padding-top:6px;padding-bottom:6px}
   .mini .now{margin:0;border-radius:0}
   .mini .bar{margin-top:6px}
-  .scroll::-webkit-scrollbar{width:8px}.scroll::-webkit-scrollbar-thumb{background:#36343e;border-radius:8px}`;
+  .scroll::-webkit-scrollbar{width:8px}.scroll::-webkit-scrollbar-thumb{background:#36343e;border-radius:8px}
+  .pklist::-webkit-scrollbar{width:6px}.pklist::-webkit-scrollbar-track{background:transparent}.pklist::-webkit-scrollbar-thumb{background:#4a4752;border-radius:6px}.pklist::-webkit-scrollbar-button{display:none;height:0}`;
 
   // ---------- UI building blocks ----------
   const el = (t, cls, txt) => { const e = document.createElement(t); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
@@ -620,13 +637,34 @@
     say(OV_LABEL[ui.ov] + '.');
   }, 'ovbtn');
   const syncOvBtn = () => { const m = ui.ov || 'bottom'; ovBtn.title = OV_LABEL[m]; ovBtn.setAttribute('aria-label', OV_LABEL[m]); ovBtn.classList.toggle('on', m !== 'off'); ovBtn.dataset.mode = m; };
-  const XL_LABEL = { next: 'Second line: next lyric', romaji: 'Second line: romaji', english: 'Second line: English' };
-  const xlBtn = ibtn('translate', XL_LABEL.next, () => {
-    ui.xl = { next: 'romaji', romaji: 'english', english: 'next' }[ui.xl || 'next']; saveUi(); syncXlBtn();
+  // which lyric goes on the big line and which on the small line under it (all songs)
+  const LM_OPTS = [['orig', 'Original'], ['romaji', 'Romaji'], ['english', 'English']];
+  const L2_OPTS = [['none', 'None'], ['next', 'Next lyric'], ['orig', 'Original'], ['romaji', 'Romaji'], ['english', 'English']];
+  const lyrName = v => (L2_OPTS.find(o => o[0] === v) || ['', v])[1];
+  const lyrMain = () => LM_OPTS.some(o => o[0] === ui.lm) ? ui.lm : 'orig';
+  const lyrSecond = () => { const v = L2_OPTS.some(o => o[0] === ui.xl) ? ui.xl : 'next'; return v === lyrMain() ? 'none' : v; };
+  const setLyr = (which, v) => {
+    if (which === 'main') { ui.lm = v; if ((ui.xl || 'next') === v) ui.xl = v === 'orig' ? 'next' : 'orig'; }
+    else ui.xl = v;
+    saveUi();
     const x = cur(); if (x) { delete failed[x.k + ':romaji']; delete failed[x.k + ':english']; }
-    say(XL_LABEL[ui.xl] + '.'); updateOverlay(true);
-  }, 'xlbtn');
-  const syncXlBtn = () => { const m = ui.xl || 'next'; xlBtn.title = XL_LABEL[m]; xlBtn.setAttribute('aria-label', XL_LABEL[m]); xlBtn.classList.toggle('on', m !== 'next'); xlBtn.dataset.mode = m; };
+    say('Lyrics: ' + lyrName(lyrMain()) + (lyrSecond() === 'none' ? ' only.' : ', then ' + lyrName(lyrSecond()).toLowerCase() + ' underneath.'));
+    updateOverlay(true); draw();
+  };
+  const choice = (cur, opts, set) => { const r = el('div', 'seg'); opts.forEach(([v, label]) => r.append(tbtn('segbtn' + (cur === v ? ' on' : ''), cur === v ? 'check' : null, label, () => set(v)))); return r; };
+  let lyrMenuOpen = false;
+  const lyrMenu = el('div', 'lyrmenu hidden');
+  const fillLyrMenu = () => {
+    lyrMenu.textContent = ''; lyrMenu.classList.toggle('hidden', !lyrMenuOpen); if (!lyrMenuOpen) return;
+    lyrMenu.append(el('div', 'lmlabel', 'Main line'), choice(lyrMain(), LM_OPTS, v => setLyr('main', v)),
+      el('div', 'lmlabel', 'Second line'), choice(lyrSecond(), L2_OPTS.filter(o => o[0] !== lyrMain()), v => setLyr('second', v)));
+  };
+  const xlBtn = ibtn('translate', 'Lyrics lines', () => { lyrMenuOpen = !lyrMenuOpen; syncXlBtn(); fillLyrMenu(); }, 'xlbtn');
+  const syncXlBtn = () => {
+    const t = 'Lyrics lines: ' + lyrName(lyrMain()) + ' + ' + lyrName(lyrSecond()).toLowerCase();
+    xlBtn.title = t; xlBtn.setAttribute('aria-label', t); xlBtn.setAttribute('aria-expanded', String(lyrMenuOpen));
+    xlBtn.classList.toggle('on', lyrMenuOpen || lyrMain() !== 'orig' || lyrSecond() !== 'next');
+  };
   const RP_LABEL = { all: 'Repeat: all', one: 'Repeat: one song', off: 'Repeat: off' };
   const setRepeat = m => { ui.rp = m; saveUi(); say(RP_LABEL[m] + '.'); draw(); };
   const rpBtn = ibtn('loop', RP_LABEL.all, () => setRepeat({ all: 'one', one: 'off', off: 'all' }[ui.rp || 'all']), 'rpbtn');
@@ -648,7 +686,7 @@
     syncCount.textContent = 'Syncing lyrics · ' + SY.times.length + ' of ' + SY.texts.length + ' lines tapped';
     syncNextEl.textContent = SY.texts[SY.times.length] ? 'Next: ' + SY.texts[SY.times.length] : 'All lines tapped';
   };
-  now.append(nowTitle, nowSub, bar, times, ctrls, syncBar);
+  now.append(nowTitle, nowSub, bar, times, ctrls, lyrMenu, syncBar);
   const status = el('div', 'status');
   const scroll = el('div', 'scroll');
   const ambient = el('div', 'ambient');
@@ -709,7 +747,73 @@
   const saveUi = () => local.set({ ui }).catch(() => {});
 
   // ---------- drawing ----------
-  let openSong = null, chooserFor = null; const collapsed = new Set();
+  let openSong = null, chooserFor = null, pickQuery = ''; const collapsed = new Set();
+  // ---------- add-to-playlist picker: recent first, then A–Z, with search ----------
+  const touchPl = k => { ui.plr = ui.plr || {}; ui.plr[k] = Date.now(); saveUi(); };   // "recently used" is kept per computer
+  const playlistPicker = x => {
+    const box = el('div', 'picker');
+    box.append(el('div', 'clabel', 'Add to playlist'));
+    const many = PL.length > 6;
+    const inp = el('input', 'pksearch'); inp.type = 'text'; inp.value = pickQuery; inp.setAttribute('aria-label', 'Search or name a new playlist');
+    inp.placeholder = many ? 'Search or name a new playlist' : 'Name a new playlist';
+    const list = el('div', 'pklist'); list.setAttribute('role', 'list');
+    const toggle = async p => {
+      const has = p.list.includes(x.k), at = p.list.indexOf(x.k);
+      if (has) p.list = p.list.filter(k => k !== x.k); else { p.list.push(x.k); touchPl(p.k); }
+      await put(p);
+      say((has ? 'Removed from ' : 'Added to ') + p.n + '.', async () => {
+        if (has) { if (!p.list.includes(x.k)) p.list.splice(Math.min(at, p.list.length), 0, x.k); } else p.list = p.list.filter(k => k !== x.k);
+        await put(p);
+      });
+      draw();
+    };
+    const create = async name => {
+      const p = await addPlaylist(name); p.list.push(x.k); await put(p); touchPl(p.k); pickQuery = '';
+      say('Made ' + p.n + ' and added the song.', async () => { if (P && P.plk === p.k) stop('Stopped.'); PL = PL.filter(y => y !== p); if (ui.plr) delete ui.plr[p.k]; if (ui.pl === p.k) delete ui.pl; saveUi(); await sync.remove(p.k); });
+      draw();
+    };
+    const row = p => {
+      const has = p.list.includes(x.k), n = p.list.filter(k => S[k]).length;
+      const b = el('button', 'pkrow' + (has ? ' on' : '')); b.type = 'button'; b.setAttribute('role', 'listitem');
+      b.setAttribute('aria-pressed', String(has)); b.setAttribute('aria-label', (has ? 'Remove from ' : 'Add to ') + p.n);
+      const mark = el('span', 'pkmark'); if (has) mark.append(icon('check'));
+      b.append(mark, el('span', 'pkname', p.n), el('span', 'pkcount', String(n)));
+      b.onclick = ev => { ev.stopPropagation(); toggle(p); };
+      return b;
+    };
+    const fill = () => {
+      list.textContent = '';
+      const qv = inp.value.trim().toLowerCase();
+      const match = PL.filter(p => !qv || p.n.toLowerCase().includes(qv));
+      const used = ui.plr || {};
+      const recent = match.filter(p => used[p.k]).sort((a, b) => used[b.k] - used[a.k]).slice(0, 3);
+      const rest = match.filter(p => !recent.includes(p)).sort((a, b) => a.n.localeCompare(b.n, undefined, { sensitivity: 'base', numeric: true }));
+      const heads = PL.length > 4 && recent.length && rest.length;
+      if (heads) list.append(el('div', 'pkhead', 'Recent'));
+      recent.forEach(p => list.append(row(p)));
+      if (heads) list.append(el('div', 'pkhead', 'All playlists'));
+      rest.forEach(p => list.append(row(p)));
+      const name = inp.value.trim();
+      if (name && !PL.some(p => p.n.toLowerCase() === name.toLowerCase())) {
+        const c = el('button', 'pkrow pknew'); c.type = 'button';
+        const mark = el('span', 'pkmark'); mark.append(icon('plus'));
+        c.append(mark, el('span', 'pkname', 'Create “' + name + '”'));
+        c.onclick = ev => { ev.stopPropagation(); create(name); };
+        list.append(c);
+      } else if (!match.length) list.append(el('div', 'pkempty', 'No playlist matches.'));
+    };
+    inp.oninput = () => { pickQuery = inp.value; fill(); };
+    inp.onkeydown = ev => {
+      if (ev.key !== 'Enter') return; ev.preventDefault();
+      const name = inp.value.trim(); if (!name) return;
+      const same = PL.find(p => p.n.toLowerCase() === name.toLowerCase());
+      if (same) toggle(same); else create(name);
+    };
+    fill();
+    box.append(inp, list);
+    if (!PL.length) box.append(el('div', 'pkempty', 'No playlists yet. Type a name above and press Enter.'));
+    return box;
+  };
 
   const draw = () => {
     place();
@@ -761,7 +865,9 @@
     setBg(x ? x.v : vidNow(), x && x.k);
     now.classList.toggle('hidden', !x && !ui.min);
     brand.textContent = 'Saine Wave';
-    syncOvBtn(); syncXlBtn(); syncRpBtn(); ovBtn.style.display = xlBtn.style.display = x && lyricsFor(x) && lyricsFor(x).synced ? '' : 'none';
+    syncOvBtn(); syncRpBtn(); ovBtn.style.display = xlBtn.style.display = x && lyricsFor(x) && lyricsFor(x).synced ? '' : 'none';
+    if (xlBtn.style.display === 'none' || SY) lyrMenuOpen = false;
+    syncXlBtn(); fillLyrMenu();
     if (!x) { nowTitle.textContent = 'Nothing playing'; nowSub.textContent = 'Open the panel to pick a song'; [prevBtn, ppBtn, nextBtn, stopBtn].forEach(b => b.style.display = 'none'); return; }
     nowTitle.textContent = x.n;
     nowSub.textContent = P.mode === 'one' ? ((ui.rp || 'all') === 'off' ? 'Playing once' : 'Looping') + (x.t ? ' · ' + x.t : '')
@@ -846,11 +952,20 @@
     const rel = v.currentTime - x.s - (x.lo || 0);
     let i = -1; for (let j = 0; j < L.lines.length; j++) { if (L.lines[j].t <= rel) i = j; else break; }
     const at = k => (L.lines[k] && L.lines[k].text) || '';
-    const mode = ui.xl || 'next';
-    if (i < 0 || mode === 'next') return { cur: i >= 0 ? (at(i) || '♪') : '', nxt: at(i + 1) };
-    const extra = extraFor(x, mode);
-    if (!extra) return { cur: at(i) || '♪', nxt: at(i + 1) };      // not ready yet: show the next line meanwhile
-    return { cur: at(i) || '♪', nxt: extra[i] && extra[i] !== at(i) ? extra[i] : '' };
+    const main = lyrMain(), sec = lyrSecond();
+    const ex = {};                                  // romaji / English lines; null while being prepared
+    for (const m of ['romaji', 'english']) if (main === m || sec === m) ex[m] = extraFor(x, m);
+    const txt = (kind, k) => kind === 'orig' ? at(k) : (ex[kind] && ex[kind][k]) || null;   // null: not ready or not needed (e.g. not Japanese)
+    const big = k => txt(main, k) || at(k);         // falls back to the original
+    if (i < 0) return { cur: '', nxt: sec === 'none' ? '' : big(0) };
+    const c = big(i) || '♪';
+    let n = '';
+    if (sec === 'next') n = big(i + 1);
+    else if (sec !== 'none') {
+      if (sec !== 'orig' && !ex[sec]) n = big(i + 1);          // not ready yet: show the next line meanwhile
+      else { const t = txt(sec, i); n = t && t !== c ? t : ''; }
+    }
+    return { cur: c, nxt: n };
   };
   const updateOverlay = force => {
     const player = q('#movie_player') || (V() && V().parentElement);
@@ -1006,7 +1121,6 @@
 
   const drawSettings = () => {
     const sec = (title, ...kids) => { const d = el('div', 'set'); d.append(el('div', 'sethead', title), ...kids); return d; };
-    const choice = (cur, opts, set) => { const r = el('div', 'seg'); opts.forEach(([v, label]) => r.append(tbtn('segbtn' + (cur === v ? ' on' : ''), cur === v ? 'check' : null, label, () => set(v)))); return r; };
     scroll.append(
       sec('Lyrics on the video',
         choice(ui.ov || 'bottom', [['bottom', 'Bottom'], ['top', 'Top'], ['off', 'Off']], v => { ui.ov = v; saveUi(); updateOverlay(true); draw(); }),
@@ -1014,9 +1128,10 @@
       sec('Repeat',
         choice(ui.rp || 'all', [['all', 'All'], ['one', 'One song'], ['off', 'Off']], v => setRepeat(v)),
         el('div', 'setnote', 'All: a song loops, a playlist starts over. One song: keep repeating the current song. Off: play once, then stop.')),
-      sec('Second line under the lyrics',
-        choice(ui.xl || 'next', [['next', 'Next lyric'], ['romaji', 'Romaji'], ['english', 'English']], v => { ui.xl = v; saveUi(); const x = cur(); if (x) { delete failed[x.k + ':romaji']; delete failed[x.k + ':english']; } updateOverlay(true); draw(); }),
-        el('div', 'setnote', 'English uses Edge\'s built-in translator (Edge 148 or newer).')),
+      sec('Lyrics lines',
+        el('div', 'lmlabel', 'Main line'), choice(lyrMain(), LM_OPTS, v => setLyr('main', v)),
+        el('div', 'lmlabel', 'Second line'), choice(lyrSecond(), L2_OPTS.filter(o => o[0] !== lyrMain()), v => setLyr('second', v)),
+        el('div', 'setnote', 'For all songs. Songs that aren\'t in Japanese show the original instead of romaji. English uses Edge\'s built-in translator (Edge 148 or newer). Also in the 🌐 button while a song plays.')),
       sec('Backup and sharing',
         (() => { const r = el('div', 'acts'); r.append(tbtn('act', 'download', 'Export everything', () => exportAll()), tbtn('act', 'upload', 'Import from file', () => importFile())); return r; })(),
         el('div', 'setnote', 'Saves your songs and playlists (with lyrics matches and timings) to a small file. Lyrics text and background frames aren\'t included.')),
@@ -1119,7 +1234,7 @@
     }
     const quick = el('div', 'acts quick');
     quick.append(
-      tbtn('act' + (chooserFor === x.k ? ' on' : ''), 'plAdd', 'Add to playlist', () => { chooserFor = chooserFor === x.k ? null : x.k; draw(); }),
+      tbtn('act' + (chooserFor === x.k ? ' on' : ''), 'plAdd', 'Add to playlist', () => { chooserFor = chooserFor === x.k ? null : x.k; pickQuery = ''; draw(); }),
       tbtn('act', 'edit', 'Rename', async () => {
         const n = prompt('Rename song', x.n); if (!n || !n.trim() || n.trim() === x.n) return;
         const old = x.n; x.n = n.trim(); await put(x);
@@ -1141,21 +1256,7 @@
         draw();
       }, 'sm danger'));
     tools.append(tune, quick);
-    if (chooserFor === x.k) {
-      const ch = el('div', 'chooser'); ch.append(el('div', 'clabel', 'Add to playlist'));
-      PL.forEach(p => {
-        const has = p.list.includes(x.k);
-        ch.append(tbtn('chip' + (has ? ' on' : ''), has ? 'check' : null, p.n, async () => {
-          if (has) p.list = p.list.filter(k => k !== x.k); else p.list.push(x.k);
-          await put(p); say((has ? 'Removed from ' : 'Added to ') + p.n + '.'); draw();
-        }));
-      });
-      ch.append(tbtn('chip', 'plus', 'New playlist', async () => {
-        const n = prompt('Name the new playlist', 'Playlist ' + (PL.length + 1)); if (!n || !n.trim()) return;
-        const p = await addPlaylist(n.trim()); p.list.push(x.k); await put(p); ui.pl = p.k; saveUi(); say('Added to ' + p.n + '.'); draw();
-      }));
-      tools.append(ch);
-    }
+    if (chooserFor === x.k) tools.append(playlistPicker(x));
 
     // optional: folded sections, each with a one-line summary
     const L = lyricsFor(x), e = LY[x.k];
@@ -1365,6 +1466,7 @@
     if (!list.length) { say('There are no songs to play.'); return; }
     clearTimeout(waiting); waiting = null;
     P = { mode: 'list', list: o.sh ? shuffle([...list]) : [...list], i: 0, rep: 1, r: o.r || 1, g: o.g || 0, sh: !!o.sh, name, plk };
+    if (plk) touchPl(plk);
     start();
   };
   const nextSong = now => {
