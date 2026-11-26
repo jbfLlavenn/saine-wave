@@ -19,7 +19,7 @@
     return ((h && h.textContent.trim()) || document.title.replace(/ - YouTube$/, '').replace(/^\(\d+\) /, '')).slice(0, 120);
   };
   // a song link; LRCLIB lyrics, their offset and tap-sync timings ride along so the person you send it to sees them too
-  const link = x => location.origin + '/watch?v=' + x.v + '&t=' + Math.floor(x.s) + 's&ls=' + x.s + '&le=' + x.e + '&ln=' + encodeURIComponent(x.n)
+  const link = (x, at) => location.origin + '/watch?v=' + x.v + '&t=' + Math.floor(at == null ? x.s : at) + 's&ls=' + x.s + '&le=' + x.e + '&ln=' + encodeURIComponent(x.n)
     + (x.li ? '&li=' + x.li + (x.lo ? '&lo=' + x.lo : '') + (x.tt && x.tt.length ? '&tt=' + x.tt.join('.') : '') : '');
   const uid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   const shuffle = a => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
@@ -1174,7 +1174,7 @@
     const card = el('div', 'song' + (playing ? ' playing' : '') + (openSong === x.k && !opts.pl ? ' open' : ''));
     const row = el('div', 'row');
     const pb = el('button', 'ib playbtn'); pb.append(icon(playing ? 'loop' : 'play'));
-    const verb = (ui.rp || 'all') === 'off' ? 'Play ' : 'Loop '; pb.title = verb + x.n; pb.setAttribute('aria-label', verb + x.n); pb.onclick = ev => { ev.stopPropagation(); playOne(x); };
+    const verb = (ui.rp || 'all') === 'off' ? 'Play ' : 'Loop '; pb.title = verb + x.n; pb.setAttribute('aria-label', verb + x.n); pb.onclick = ev => { ev.stopPropagation(); if (opts.onPlay) opts.onPlay(); else playOne(x); };
     const meta = el('div', 'meta');
     meta.append(el('div', 'name', x.n), el('div', 'sub', fmt(x.s) + ' – ' + fmt(x.e) + '  ·  ' + fmt(x.e - x.s) + (opts.pl && x.t ? '  ·  ' + x.t : '')));
     if (opts.num != null) row.append(el('div', 'num', String(opts.num)));
@@ -1378,7 +1378,7 @@
     if (!songs.length) { scroll.append(empty('plAdd', 'This playlist is empty. On the Songs tab, open a song\'s options and choose Add to playlist.')); return; }
     songs.forEach((x, i) => {
       const mv = async d => { const j = i + d; if (j < 0 || j >= songs.length) return; const a = p.list.indexOf(x.k), b = p.list.indexOf(songs[j].k); [p.list[a], p.list[b]] = [p.list[b], p.list[a]]; await put(p); draw(); };
-      scroll.append(songRow(x, { num: i + 1, pl: plEdit ? [
+      scroll.append(songRow(x, { num: i + 1, onPlay: () => playList(p.list, p, p.n, p.k, x.k), pl: plEdit ? [
         ibtn('up', 'Move up', () => mv(-1), 'sm'), ibtn('dn', 'Move down', () => mv(1), 'sm'),
         ibtn('remove', 'Remove from playlist', async () => {
           const at = p.list.indexOf(x.k); p.list = p.list.filter(k => k !== x.k); await put(p);
@@ -1444,6 +1444,7 @@
   // P = { mode:'one'|'list', list:[song keys], i, rep, r, g, sh, name, plk }
   let P = null, last = -1, waiting = null;
   const PLAY_KEY = 'saineWavePlay';
+  let navBackup = null;
   const cur = () => P && S[P.list[P.i]];
   const seek = (v, t) => { v.currentTime = t; last = t; };
   const whenReady = (fn, tries = 0) => {
@@ -1459,22 +1460,31 @@
   };
   const start = () => {
     const x = cur(); if (!x) { nextSong(true); return; }
+    const r = P.resume;
+    const from = r && r.k === x.k && r.t >= x.s && r.t < x.e - 1 ? r.t : x.s;
     if (x.v !== vidNow()) {                     // song is in another video: open it, then carry on
       sessionStorage.setItem(PLAY_KEY, JSON.stringify(P));
       say('Opening ' + x.n + '…');
-      location.href = link(x);
+      document.dispatchEvent(new CustomEvent('saine-wave-nav', { detail: JSON.stringify({ v: x.v, t: from }) }));   // the way YouTube switches videos
+      clearTimeout(navBackup);
+      navBackup = setTimeout(() => { if (vidNow() !== x.v) location.href = link(x, from); }, 2500);   // backup: full reload
       return;
     }
-    const r = P.resume; delete P.resume;
-    const from = r && r.k === x.k && r.t >= x.s && r.t < x.e - 1 ? r.t : x.s;
+    clearTimeout(navBackup); delete P.resume;
     whenReady(v => { seek(v, from); v.play().catch(() => {}); say(''); draw(); });
   };
   const playOne = x => { clearTimeout(waiting); waiting = null; P = { mode: 'one', list: [x.k], i: 0, rep: 1, r: 1, g: 0 }; start(); };
-  const playList = (keys, o, name, plk) => {
+  const playList = (keys, o, name, plk, from) => {
     const list = keys.filter(k => S[k]);
     if (!list.length) { say('There are no songs to play.'); return; }
     clearTimeout(waiting); waiting = null;
+    if (from && P && P.mode === 'list' && plk && P.plk === plk && P.list.includes(from)) {   // already playing this playlist: jump to the song
+      P.i = P.list.indexOf(from); P.rep = 1; delete P.resume; start(); return;
+    }
     P = { mode: 'list', list: o.sh ? shuffle([...list]) : [...list], i: 0, rep: 1, r: o.r || 1, g: o.g || 0, sh: !!o.sh, name, plk };
+    if (from && P.list.includes(from)) {
+      if (P.sh) { P.list = [from, ...P.list.filter(k => k !== from)]; } else P.i = P.list.indexOf(from);   // shuffled: start with it
+    }
     if (plk) touchPl(plk);
     start();
   };
