@@ -9,6 +9,8 @@
   const V = () => q('video.html5-main-video') || q('video');
   const vidNow = () => (location.pathname === '/watch' && new URLSearchParams(location.search).get('v')) || '';
   const r1 = n => Math.round(n * 10) / 10;
+  const adOn = () => !!q('#movie_player.ad-showing, .ad-showing');   // YouTube marks its player while an ad plays
+  const AD_WAIT = 'An ad is playing. Wait for it to finish, then try again.';
   const fmt = n => {
     n = Math.max(0, Math.round(n));
     const h = Math.floor(n / 3600), m = Math.floor((n - h * 3600) / 60), s = n - h * 3600 - m * 60;
@@ -934,7 +936,13 @@
     syncOvBtn(); syncRpBtn(); ovBtn.style.display = xlBtn.style.display = x && lyricsFor(x) && lyricsFor(x).synced ? '' : 'none';
     if (xlBtn.style.display === 'none' || SY) lyrMenuOpen = false;
     syncXlBtn(); fillLyrMenu();
-    if (!x) { nowTitle.textContent = 'Nothing playing'; nowSub.textContent = 'Open the panel to pick a song'; [prevBtn, ppBtn, nextBtn, stopBtn].forEach(b => b.style.display = 'none'); return; }
+    if (!x) {                                     // nothing playing: just the text, no controls, bar or times
+      nowTitle.textContent = 'Nothing playing'; nowSub.textContent = 'Open the panel to pick a song';
+      [prevBtn, ppBtn, nextBtn, stopBtn, rpBtn].forEach(b => b.style.display = 'none');
+      bar.style.display = times.style.display = ctrls.style.display = 'none';
+      return;
+    }
+    rpBtn.style.display = bar.style.display = times.style.display = ctrls.style.display = '';
     nowTitle.textContent = x.n;
     nowSub.textContent = P.mode === 'one' ? ((ui.rp || 'all') === 'off' ? 'Playing once' : 'Looping') + (x.t ? ' · ' + x.t : '')
       : P.name + ' · ' + (P.i + 1) + ' of ' + P.list.length + (P.r > 1 ? ' · play ' + P.rep + ' of ' + P.r : '');
@@ -982,6 +990,7 @@
   };
   const syncTap = () => {
     const x = syncSong(), v = V(); if (!x || !v) return;
+    if (adOn()) { say('An ad is playing. Taps are ignored until it finishes.'); return; }
     if (SY.times.length >= SY.texts.length) return;
     SY.times.push(Math.max(0, Math.round((v.currentTime - x.s) * 10)));
     drawSyncBar(); updateOverlay(true);
@@ -1281,6 +1290,7 @@
         b.append(l,
           ibtn(f === 's' ? 'markIn' : 'markOut', 'Set ' + label.toLowerCase() + ' to the current video time', () => {
             const v = V(); if (!v || x.v !== vidNow()) { say('Open this song\'s stream first.'); return; }
+            if (adOn()) { say(AD_WAIT); return; }
             setDraft(f, v.currentTime);
           }, 'sm'),
           ibtn('minus', label + ' 1 second earlier', () => setDraft(f, ed[f] - 1), 'sm'),
@@ -1291,6 +1301,7 @@
       const prevRow = el('div', 'acts');
       const preview = from => {
         const v = V(); if (!v || x.v !== vidNow()) { say('Open this song\'s stream first.'); return; }
+        if (adOn()) { say(AD_WAIT); return; }
         if (P) stop(null);
         previewEnd = from === 'end' ? ed.e : Math.min(ed.e, ed.s + 8);
         seek(v, from === 'end' ? Math.max(ed.s, ed.e - 5) : ed.s); v.play().catch(() => {});
@@ -1350,6 +1361,7 @@
       bgBtns.append(tbtn('act', 'image', 'Use current frame', async () => {
         const v = V();
         if (!v || x.v !== vidNow()) { say('Open this song\'s stream first, then pause on the frame you like.'); return; }
+        if (adOn()) { say(AD_WAIT); return; }
         const url = grabFrame();
         if (!url) { say('Could not grab this frame. Let the video play for a moment and try again.'); return; }
         x.f = r1(v.currentTime); await put(x); await saveImg(x, url);
@@ -1559,12 +1571,14 @@
   const cancelCreate = () => { creating = false; mark = null; say(''); draw(); };
   const markStart = () => {
     const v = V(); if (!v || !vidNow()) { say('Open a video first.'); return; }
+    if (adOn()) { creating = true; ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say(AD_WAIT); return; }
     if (P) stop(null);
     creating = true; mark = v.currentTime; markVid = vidNow(); ui.tab = 'songs'; ui.min = false; toggle(true);
     say(''); draw();
   };
   const markEnd = async () => {
     const v = V(); if (!v) return;
+    if (adOn()) { say(AD_WAIT); return; }
     if (mark != null && markVid !== vidNow()) { mark = null; markVid = null; creating = true; ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say('The start was marked on a different stream. Mark the start again on this one.'); return; }
     if (mark == null) { creating = true; ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say('Mark the start first.'); return; }
     const e = v.currentTime;
@@ -1654,7 +1668,7 @@
   };
   const tick = () => {
     autoGrab();
-    if (previewEnd != null && !P) { const v = V(); if (v && v.currentTime >= previewEnd) { v.pause(); previewEnd = null; say('Preview done.'); } }
+    if (previewEnd != null && !P && !adOn()) { const v = V(); if (v && v.currentTime >= previewEnd) { v.pause(); previewEnd = null; say('Preview done.'); } }
     if (creating && isOpen()) updateCreateNow();
     if (!P || waiting) return;
     const v = V(), x = cur();
