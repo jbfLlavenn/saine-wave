@@ -322,6 +322,10 @@
     close: 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
     shrink: 'M5 11h14v2H5z', expand: 'M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z',
     check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+    grip: 'M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
+    boxOff: 'M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z',
+    boxOn: 'M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2V5c0-1.1-.89-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
+    boxPart: 'M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-2 10H7v-2h10v2z',
     up: 'M4 12l1.41 1.41L11 7.83V20h2V7.83l5.58 5.59L20 12l-8-8-8 8z', dn: 'M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z',
     queue: 'M15 6H3v2h12V6zm0 4H3v2h12v-2zM3 16h8v-2H3v2zM17 6v8.18c-.31-.11-.65-.18-1-.18-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3V8h3V6h-5z',
     note: 'M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z',
@@ -552,6 +556,20 @@
   .act:hover{background:#383641;color:#fff}.act svg{width:16px;height:16px}
   .act.danger:hover{background:rgba(244,166,193,.14);color:#F4A6C1}
   .picker{margin-top:8px;padding:8px;border-radius:10px;background:#1E1E24}
+  .pkrow.part{color:#A6D8F0}
+  .pllist{display:flex;flex-direction:column}
+  .draghandle{cursor:grab;touch-action:none;color:#bdbac6;flex:none;width:28px;margin-right:-4px}.draghandle:active{cursor:grabbing}
+  .pllist.sorting{user-select:none}.pllist.sorting .song:not(.dragging){transition:transform .12s}
+  .song.dragging{opacity:.95;outline:2px solid #A6D8F0;background:#2e3440;box-shadow:0 8px 20px rgba(0,0,0,.45);position:relative;z-index:3}
+  .rmchip{height:28px;padding:0 10px 0 6px;border-radius:14px;background:#3a2a32;color:#F4A6C1;font-size:12px;gap:4px;flex:none}
+  .rmchip svg{width:14px;height:14px}.rmchip:hover{background:#4a3340}
+  .allbar{display:flex;align-items:center;gap:6px;margin:8px 0 2px;flex-wrap:wrap}
+  .selhint{font-size:12px;color:#bdbac6;padding-left:2px}
+  .song.sel .row{gap:8px}.song.chosen{background:#2e3440;outline:1px solid rgba(166,216,240,.45)}
+  .selbox svg{fill:#A6D8F0}
+  .selbar{position:sticky;bottom:0;z-index:2;margin-top:8px;padding:8px;border-radius:12px;background:rgba(30,30,36,.97);box-shadow:0 -6px 16px rgba(0,0,0,.35)}
+  .selbar .picker{margin:0 0 8px}
+  .selrow{display:flex;align-items:center;gap:6px}.selcount{font-size:13px;color:#F2F4F8}
   .pksearch{width:100%;box-sizing:border-box;height:32px;margin:6px 0;padding:0 10px;border-radius:8px;border:1px solid #3a3842;background:#25242c;color:#F2F4F8;font:inherit;font-size:13px}
   .pksearch:focus{outline:2px solid #A6D8F0;outline-offset:-1px}
   .pklist{max-height:190px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;overscroll-behavior:contain}
@@ -755,35 +773,76 @@
 
   // ---------- drawing ----------
   let openSong = null, chooserFor = null, pickQuery = ''; const collapsed = new Set();
+  let pickStream = null, selecting = null, pickSel = false;     // add a whole stream / selected songs to a playlist
+  const endSelect = () => { selecting = null; pickSel = false; };
+  let dragging = false, keepFocus = null;
+  // drag a song by its handle to a new place in the playlist (mouse or touch)
+  const startDrag = (ev, handle, list, x, done) => {
+    if (ev.button > 0) return;
+    ev.preventDefault();
+    const card = handle.closest('.song'); if (!card) return;
+    dragging = true;
+    const y0 = ev.clientY, start = [...list.children].indexOf(card);
+    card.classList.add('dragging'); list.classList.add('sorting');
+    const id = ev.pointerId;
+    const move = e => {
+      if (e.pointerId !== id) return;
+      const r = scroll.getBoundingClientRect();        // scroll the panel near its edges
+      if (e.clientY < r.top + 40) scroll.scrollTop -= 10; else if (e.clientY > r.bottom - 40) scroll.scrollTop += 10;
+      const others = [...list.children].filter(c => c !== card);
+      let at = others.length;
+      for (let i = 0; i < others.length; i++) { const b = others[i].getBoundingClientRect(); if (e.clientY < b.top + b.height / 2) { at = i; break; } }
+      const ref = others[at] || null;
+      if (card.nextSibling !== ref) list.insertBefore(card, ref);
+      [...list.children].forEach((c, i) => { const n = c.querySelector('.num'); if (n) n.textContent = String(i + 1); });
+    };
+    const end = e => {
+      if (e && e.pointerId !== id) return;
+      window.removeEventListener('pointermove', move, true); window.removeEventListener('pointerup', end, true); window.removeEventListener('pointercancel', end, true);
+      card.classList.remove('dragging'); list.classList.remove('sorting'); dragging = false;
+      const keys = [...list.children].map(c => c.dataset.k);
+      if ([...list.children].indexOf(card) === start) { draw(); return; }
+      done(keys, x);
+    };
+    // listen on the page, not the handle: moving the row in the list would make the browser drop the handle's events
+    window.addEventListener('pointermove', move, true); window.addEventListener('pointerup', end, true); window.addEventListener('pointercancel', end, true);
+  };
   // ---------- add-to-playlist picker: recent first, then A–Z, with search ----------
   const touchPl = k => { ui.plr = ui.plr || {}; ui.plr[k] = Date.now(); saveUi(); };   // "recently used" is kept per computer
-  const playlistPicker = x => {
+  const playlistPicker = (keys, done) => {
+    keys = keys.filter(k => S[k]);
+    const one = keys.length === 1, nSongs = n => n === 1 ? '1 song' : n + ' songs';
     const box = el('div', 'picker');
-    box.append(el('div', 'clabel', 'Add to playlist'));
+    box.append(el('div', 'clabel', one ? 'Add to playlist' : 'Add ' + nSongs(keys.length) + ' to playlist'));
     const many = PL.length > 6;
     const inp = el('input', 'pksearch'); inp.type = 'text'; inp.value = pickQuery; inp.setAttribute('aria-label', 'Search or name a new playlist');
     inp.placeholder = many ? 'Search or name a new playlist' : 'Name a new playlist';
     const list = el('div', 'pklist'); list.setAttribute('role', 'list');
+    const inside = p => keys.filter(k => p.list.includes(k)).length;      // how many of these songs the playlist has
     const toggle = async p => {
-      const has = p.list.includes(x.k), at = p.list.indexOf(x.k);
-      if (has) p.list = p.list.filter(k => k !== x.k); else { p.list.push(x.k); touchPl(p.k); }
+      const before = [...p.list], n = inside(p), all = n === keys.length;
+      if (all) p.list = p.list.filter(k => !keys.includes(k));
+      else { keys.forEach(k => { if (!p.list.includes(k)) p.list.push(k); }); touchPl(p.k); }
       await put(p);
-      say((has ? 'Removed from ' : 'Added to ') + p.n + '.', async () => {
-        if (has) { if (!p.list.includes(x.k)) p.list.splice(Math.min(at, p.list.length), 0, x.k); } else p.list = p.list.filter(k => k !== x.k);
-        await put(p);
-      });
+      const msg = one ? (all ? 'Removed from ' : 'Added to ') + p.n + '.'
+        : all ? 'Removed ' + nSongs(keys.length) + ' from ' + p.n + '.'
+        : 'Added ' + nSongs(keys.length - n) + ' to ' + p.n + (n ? ' (' + n + (n === 1 ? ' was' : ' were') + ' already there).' : '.');
+      if (done) done();
+      say(msg, async () => { p.list = before; await put(p); });
       draw();
     };
     const create = async name => {
-      const p = await addPlaylist(name); p.list.push(x.k); await put(p); touchPl(p.k); pickQuery = '';
-      say('Made ' + p.n + ' and added the song.', async () => { if (P && P.plk === p.k) stop('Stopped.'); PL = PL.filter(y => y !== p); if (ui.plr) delete ui.plr[p.k]; if (ui.pl === p.k) delete ui.pl; saveUi(); await sync.remove(p.k); });
+      const p = await addPlaylist(name); keys.forEach(k => p.list.push(k)); await put(p); touchPl(p.k); pickQuery = '';
+      if (done) done();
+      say('Made ' + p.n + ' and added ' + (one ? 'the song' : nSongs(keys.length)) + '.', async () => { if (P && P.plk === p.k) stop('Stopped.'); PL = PL.filter(y => y !== p); if (ui.plr) delete ui.plr[p.k]; if (ui.pl === p.k) delete ui.pl; saveUi(); await sync.remove(p.k); });
       draw();
     };
     const row = p => {
-      const has = p.list.includes(x.k), n = p.list.filter(k => S[k]).length;
-      const b = el('button', 'pkrow' + (has ? ' on' : '')); b.type = 'button'; b.setAttribute('role', 'listitem');
-      b.setAttribute('aria-pressed', String(has)); b.setAttribute('aria-label', (has ? 'Remove from ' : 'Add to ') + p.n);
-      const mark = el('span', 'pkmark'); if (has) mark.append(icon('check'));
+      const c = inside(p), has = c === keys.length, part = c > 0 && !has, n = p.list.filter(k => S[k]).length;
+      const b = el('button', 'pkrow' + (has ? ' on' : part ? ' part' : '')); b.type = 'button'; b.setAttribute('role', 'listitem');
+      b.setAttribute('aria-pressed', has ? 'true' : part ? 'mixed' : 'false');
+      b.setAttribute('aria-label', (has ? 'Remove from ' : 'Add to ') + p.n + (part ? ' (has ' + c + ' of ' + keys.length + ')' : ''));
+      const mark = el('span', 'pkmark'); if (has) mark.append(icon('check')); else if (part) mark.append(icon('minus'));
       b.append(mark, el('span', 'pkname', p.n), el('span', 'pkcount', String(n)));
       b.onclick = ev => { ev.stopPropagation(); toggle(p); };
       return b;
@@ -823,6 +882,7 @@
   };
 
   const draw = () => {
+    if (dragging) return;
     place();
     panel.classList.toggle('mini', ui.min);
     setIcon(minBtn, ui.min ? 'expand' : 'shrink', ui.min ? 'Expand' : 'Shrink');
@@ -1171,13 +1231,24 @@
   };
   const songRow = (x, opts = {}) => {
     const playing = P && cur() === x;
-    const card = el('div', 'song' + (playing ? ' playing' : '') + (openSong === x.k && !opts.pl ? ' open' : ''));
+    const card = el('div', 'song' + (playing ? ' playing' : '') + (openSong === x.k && !opts.pl ? ' open' : '')); card.dataset.k = x.k;
     const row = el('div', 'row');
+    if (selecting && !opts.pl) {                      // select mode: the whole row is a checkbox
+      const on = selecting.has(x.k);
+      card.classList.add('sel'); if (on) card.classList.add('chosen');
+      const cb = el('button', 'ib selbox'); cb.append(icon(on ? 'boxOn' : 'boxOff'));
+      cb.setAttribute('role', 'checkbox'); cb.setAttribute('aria-checked', String(on)); cb.setAttribute('aria-label', 'Select ' + x.n);
+      const flip = ev => { ev.stopPropagation(); if (on) selecting.delete(x.k); else selecting.add(x.k); draw(); };
+      cb.onclick = flip; row.onclick = flip; row.style.cursor = 'pointer';
+      const meta = el('div', 'meta'); meta.append(el('div', 'name', x.n), el('div', 'sub', fmt(x.s) + ' – ' + fmt(x.e) + '  ·  ' + fmt(x.e - x.s)));
+      row.append(cb, meta); card.append(row); return card;
+    }
     const pb = el('button', 'ib playbtn'); pb.append(icon(playing ? 'loop' : 'play'));
     const verb = (ui.rp || 'all') === 'off' ? 'Play ' : 'Loop '; pb.title = verb + x.n; pb.setAttribute('aria-label', verb + x.n); pb.onclick = ev => { ev.stopPropagation(); if (opts.onPlay) opts.onPlay(); else playOne(x); };
     const meta = el('div', 'meta');
     meta.append(el('div', 'name', x.n), el('div', 'sub', fmt(x.s) + ' – ' + fmt(x.e) + '  ·  ' + fmt(x.e - x.s) + (opts.pl && x.t ? '  ·  ' + x.t : '')));
-    if (opts.num != null) row.append(el('div', 'num', String(opts.num)));
+    if (opts.lead) row.append(opts.lead);
+    else if (opts.num != null) row.append(el('div', 'num', String(opts.num)));
     row.append(pb, meta);
     if (opts.pl) row.append(...opts.pl);
     else {
@@ -1263,7 +1334,7 @@
         draw();
       }, 'sm danger'));
     tools.append(tune, quick);
-    if (chooserFor === x.k) tools.append(playlistPicker(x));
+    if (chooserFor === x.k) tools.append(playlistPicker([x.k]));
 
     // optional: folded sections, each with a one-line summary
     const L = lyricsFor(x), e = LY[x.k];
@@ -1314,15 +1385,31 @@
         step(2, false, 'Drag to where it ends, then Mark end + save.'), marks, foot);
       scroll.append(c);
       updateCreateNow();
-    } else if (vidNow()) {
+    } else if (vidNow() && !selecting) {
       const add = tbtn('newbtn', 'plus', 'New song', () => startCreate()); add.title = 'Add a song from this stream (shortcut: [)';
       scroll.append(add);
     }
     const songs = Object.values(S);
-    if (!songs.length) { if (!creating) scroll.append(empty('note', vidNow() ? 'No songs yet. Press New song to save one from this stream.' : 'No songs yet. Open a stream to start.')); return; }
+    if (!songs.length) { endSelect(); if (!creating) scroll.append(empty('note', vidNow() ? 'No songs yet. Press New song to save one from this stream.' : 'No songs yet. Open a stream to start.')); return; }
     const here = vidNow(), groups = {};
     songs.forEach(x => { (groups[x.v] = groups[x.v] || []).push(x); });
     const order = Object.keys(groups).sort((a, b) => (a === here ? -1 : b === here ? 1 : (groups[a][0].t || '').localeCompare(groups[b][0].t || '')));
+    const allKeys = order.flatMap(v => groups[v].slice().sort((a, b) => a.s - b.s).map(x => x.k));   // stream by stream, fewer stream switches
+    if (!creating) {
+      const bar = el('div', 'allbar');
+      if (selecting) {
+        bar.append(el('span', 'selhint', 'Tap songs to select them'), el('span', 'grow'),
+          tbtn('chip', selecting.size === allKeys.length ? 'boxOff' : 'boxOn', selecting.size === allKeys.length ? 'Select none' : 'Select all', () => {
+            if (selecting.size === allKeys.length) selecting.clear(); else allKeys.forEach(k => selecting.add(k)); draw(); }));
+      } else {
+        bar.append(tbtn('chip', 'play', 'Play all', () => playList(allKeys, { sh: false, r: 1, g: 0 }, 'All songs')),
+          tbtn('chip', 'shuffle', 'Shuffle all', () => { const mine = here && groups[here] ? groups[here] : null;   // start with a song on this stream: no switch first
+            playList(allKeys, { sh: true, r: 1, g: 0 }, 'All songs', null, mine ? mine[Math.floor(Math.random() * mine.length)].k : null); }),
+          el('span', 'grow'),
+          tbtn('chip', 'boxOn', 'Select', () => { selecting = new Set(); pickSel = false; pickStream = null; openSong = null; chooserFor = null; draw(); }));
+      }
+      scroll.append(bar);
+    }
     order.forEach(v => {
       const list = groups[v].sort((a, b) => a.s - b.s);
       const t = (list.find(x => x.t) || {}).t || 'Video ' + v;
@@ -1334,12 +1421,36 @@
       if (v === here) title.append(el('span', 'here', 'Now watching'));
       title.append(t);
       title.onclick = tog;
-      gh.append(ibtn(isC ? 'right' : 'down', isC ? 'Show songs' : 'Hide songs', tog, 'sm'), title, el('span', 'badge', String(list.length)),
-        ibtn('play', 'Play all songs from this stream', () => playList(list.map(x => x.k), { sh: false, r: 1, g: 0 }, t), 'sm'));
+      gh.append(ibtn(isC ? 'right' : 'down', isC ? 'Show songs' : 'Hide songs', tog, 'sm'), title, el('span', 'badge', String(list.length)));
+      if (selecting) {
+        const n = list.filter(x => selecting.has(x.k)).length, all = n === list.length;
+        const b = ibtn(all ? 'boxOn' : n ? 'boxPart' : 'boxOff', (all ? 'Unselect' : 'Select') + ' all songs from this stream', () => {
+          list.forEach(x => all ? selecting.delete(x.k) : selecting.add(x.k)); draw(); }, 'sm selbox');
+        b.setAttribute('role', 'checkbox'); b.setAttribute('aria-checked', all ? 'true' : n ? 'mixed' : 'false');
+        gh.append(b);
+      } else {
+        const pk = ibtn('plAdd', 'Add all songs from this stream to a playlist', () => { pickStream = pickStream === v ? null : v; pickQuery = ''; draw(); }, 'sm' + (pickStream === v ? ' on' : ''));
+        pk.setAttribute('aria-expanded', String(pickStream === v));
+        gh.append(pk, ibtn('play', 'Play all songs from this stream', () => playList(list.map(x => x.k), { sh: false, r: 1, g: 0 }, t), 'sm'));
+      }
       g.append(gh);
+      if (pickStream === v && !selecting) g.append(playlistPicker(list.map(x => x.k)));
       if (!isC) list.forEach(x => g.append(songRow(x)));
       scroll.append(g);
     });
+    if (selecting) {
+      [...selecting].forEach(k => { if (!S[k]) selecting.delete(k); });
+      const sb = el('div', 'selbar');
+      const n = selecting.size;
+      if (pickSel && n) sb.append(playlistPicker([...selecting], endSelect));
+      const row = el('div', 'selrow');
+      const add = tbtn('act primary', 'plAdd', 'Add to playlist', () => { pickSel = !pickSel; pickQuery = ''; draw(); });
+      add.disabled = !n;
+      row.append(el('span', 'selcount', n ? n + ' selected' : 'None selected'), el('span', 'grow'), add,
+        tbtn('act', 'close', 'Cancel', () => { endSelect(); draw(); }));
+      sb.append(row);
+      scroll.append(sb);
+    }
   };
 
   const drawPlaylists = () => {
@@ -1376,16 +1487,43 @@
     opts.append(el('span', 'grow'), tbtn('chip' + (plEdit ? ' on' : ''), plEdit ? 'check' : 'edit', plEdit ? 'Done' : 'Edit list', () => { plEdit = !plEdit; draw(); }));
     scroll.append(opts, tbtn('playall', 'play', 'Play ' + p.n, () => playList(p.list, p, p.n, p.k)));
     if (!songs.length) { scroll.append(empty('plAdd', 'This playlist is empty. On the Songs tab, open a song\'s options and choose Add to playlist.')); return; }
+    // save a new order of the shown songs (songs that no longer exist keep their place at the end)
+    const reorder = async (keys, moved) => {
+      const before = [...p.list];
+      p.list = [...keys, ...p.list.filter(k => !keys.includes(k))];
+      if (p.list.join() === before.join()) return;
+      await put(p);
+      say('Moved ' + moved.n + '.', async () => { p.list = before; await put(p); });
+      draw();
+    };
+    const list = el('div', 'pllist');
     songs.forEach((x, i) => {
-      const mv = async d => { const j = i + d; if (j < 0 || j >= songs.length) return; const a = p.list.indexOf(x.k), b = p.list.indexOf(songs[j].k); [p.list[a], p.list[b]] = [p.list[b], p.list[a]]; await put(p); draw(); };
-      scroll.append(songRow(x, { num: i + 1, onPlay: () => playList(p.list, p, p.n, p.k, x.k), pl: plEdit ? [
-        ibtn('up', 'Move up', () => mv(-1), 'sm'), ibtn('dn', 'Move down', () => mv(1), 'sm'),
-        ibtn('remove', 'Remove from playlist', async () => {
+      const extra = []; let lead = null;
+      if (plEdit) {
+        const h = el('button', 'ib sm draghandle'); h.append(icon('grip'));
+        h.setAttribute('aria-label', 'Move ' + x.n + ' (drag, or use the arrow keys)'); h.title = 'Drag to move';
+        h.onkeydown = ev => {                         // keyboard: arrow keys move the song
+          const d = ev.key === 'ArrowUp' ? -1 : ev.key === 'ArrowDown' ? 1 : 0; if (!d) return;
+          ev.preventDefault(); const j = i + d; if (j < 0 || j >= songs.length) return;
+          const keys = songs.map(y => y.k); [keys[i], keys[j]] = [keys[j], keys[i]];
+          keepFocus = { k: x.k, until: Date.now() + 1500 }; reorder(keys, x);
+        };
+        h.onpointerdown = ev => startDrag(ev, h, list, x, reorder);
+        const rm = tbtn('rmchip', 'close', 'Remove', async () => {
           const at = p.list.indexOf(x.k); p.list = p.list.filter(k => k !== x.k); await put(p);
           say('Removed ' + x.n + ' from ' + p.n + '.', async () => { if (!p.list.includes(x.k)) p.list.splice(at, 0, x.k); await put(p); say('Put back.'); });
           draw();
-        }, 'sm danger')] : [] }));
+        });
+        rm.setAttribute('aria-label', 'Remove ' + x.n + ' from this playlist'); rm.title = 'Remove from this playlist (the song stays saved)';
+        extra.push(rm);
+        lead = h;
+      }
+      list.append(songRow(x, { num: i + 1, lead, onPlay: () => playList(p.list, p, p.n, p.k, x.k), pl: extra }));
     });
+    scroll.append(list);
+    if (keepFocus && Date.now() < keepFocus.until) {      // keep the keyboard on the moved song's handle, even across redraws
+      const g = list.querySelector('.song[data-k="' + keepFocus.k + '"] .draghandle'); if (g) setTimeout(() => g.focus(), 0);
+    } else keepFocus = null;
   };
 
   const toggle = show => {

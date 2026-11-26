@@ -25,7 +25,7 @@ If you're interested, [open an issue](../../issues) and say hi!
 - **Save songs from any stream.** Press *New song*, mark the start and end while the video plays, and give it a name.
 - **Views go to the streamer.** Saine Wave always plays the original stream on YouTube, so every listen still counts as a view for the streamer.
 - **Loop or play through.** Repeat one song, repeat everything, or play once — like a normal music player.
-- **Playlists.** Mix songs from different streams. Saine Wave opens each stream at the right moment. Adding a song to a playlist shows your recent playlists first, then the rest A–Z, with search.
+- **Playlists.** Mix songs from different streams. Saine Wave opens each stream at the right moment. Add a song, a whole stream, or a selection of songs to a playlist, and drag to reorder. You can also play or shuffle all your songs without a playlist.
 - **Lyrics on the video.** Search [LRCLIB](https://lrclib.net) for a song's lyrics in a click, or paste your own (plain text, LRC or SRT). The sample Saine songs come with lyrics ready.
 - **Romaji and English.** Pick what goes on the big line and the small line under it: the original lyrics, romaji or English. Romaji is made on your computer; English uses the browser's built-in translator (Edge 148 or newer).
 - **Tap to sync.** For lyrics without timings, tap Space at the start of each line while the song plays.
