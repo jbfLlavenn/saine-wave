@@ -22,7 +22,7 @@ If you're interested, [open an issue](../../issues) and say hi!
 
 ## Features
 
-- **Save songs from any stream.** Press *New song*, mark the start and end while the video plays, and give it a name.
+- **Save songs from any stream.** Press *New song*, mark the start and end while the video plays, and give it a name. For a music video or cover, save the whole video in one click with *Save to Saine Wave* under the video.
 - **Views go to the streamer.** Saine Wave always plays the original stream on YouTube, so every listen still counts as a view for the streamer.
 - **Loop or play through.** Repeat one song, repeat everything, or play once — like a normal music player.
 - **Playlists.** Mix songs from different streams. Saine Wave opens each stream at the right moment. Add a song, a whole stream, or a selection of songs to a playlist, and drag to reorder. You can also play or shuffle all your songs without a playlist.

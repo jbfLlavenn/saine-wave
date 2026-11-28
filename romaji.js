@@ -41,6 +41,9 @@
   const glue = (t, prev) => (t.pos === '助動詞' && prev && /^(動詞|形容詞|助動詞)$/.test(prev.pos)) || (t.pos === '助詞' && t.pos_detail_1 === '接続助詞' && /^[てでば]$/.test(t.surface_form)) ||
     (t.pos === '動詞' && t.pos_detail_1 === '非自立') || t.pos_detail_1 === '接尾';
   const PARTICLE = { は: 'wa', へ: 'e', を: 'o' };
+  // Words that songs almost always sing differently from the dictionary's everyday reading.
+  // Keep this short: only add a word when the song reading is clearly the norm.
+  const SONG_READING = { '身体': 'カラダ' };
 
   const lineToRomaji = (tokenizer, line) => {
     if (!isJapanese(line)) return line;
@@ -48,7 +51,8 @@
     for (const t of tokenizer.tokenize(line)) {
       const surf = t.surface_form;
       let r;
-      if (t.pos === '助詞' && PARTICLE[surf]) r = PARTICLE[surf];
+      if (SONG_READING[surf]) r = kanaToRomaji(SONG_READING[surf]);
+      else if (t.pos === '助詞' && PARTICLE[surf]) r = PARTICLE[surf];
       else if (t.reading && t.reading !== '*') r = kanaToRomaji(t.reading);
       else if (hasKana(surf)) r = kanaToRomaji(surf);
       else r = surf;

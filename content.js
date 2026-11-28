@@ -206,19 +206,36 @@
     return PARSED[x.k].lines.length ? PARSED[x.k] : null;
   };
   const saveLyrics = async (x, entry) => { LY[x.k] = entry; try { await local.set({ ['lyr_' + x.k]: entry }); } catch (err) {} };
-  const dropLyrics = async x => { delete LY[x.k]; delete PARSED[x.k]; delete TR[x.k]; try { await local.remove(['lyr_' + x.k, 'tr_' + x.k]); } catch (err) {} };
+  const dropLyrics = async x => { delete LY[x.k]; delete PARSED[x.k]; delete TR[x.k]; delete OWN[x.k]; try { await local.remove(['lyr_' + x.k, 'tr_' + x.k, 'own_' + x.k]); } catch (err) {} };
 
   // ---------- romaji / English for the second line (kept on this computer) ----------
   const TR = {};                                   // song key -> { h, ro: [..], en: [..] }
   const hashOf = str => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h * 33) ^ str.charCodeAt(i)) >>> 0; return h.toString(36) + ':' + str.length; };
-  const loadTr = async () => { try { const all = await local.get(null); for (const k in all) if (k.startsWith('tr_')) TR[k.slice(3)] = all[k]; } catch (err) {} };
+  const OWN = {};                                  // song key -> { ro: text, en: text } you pasted yourself (this computer)
+  const loadTr = async () => { try { const all = await local.get(null); for (const k in all) { if (k.startsWith('tr_')) TR[k.slice(3)] = all[k]; if (k.startsWith('own_')) OWN[k.slice(4)] = all[k]; } } catch (err) {} };
+  const ownLines = raw => String(raw || '').split(/\r?\n/).map(l => l.replace(/^\s*(\[[^\]]*\]\s*)+/, '').trim()).filter(Boolean);   // timings like [01:23.45] are dropped
+  // match your own lines to the lyric lines that have text, in order
+  const alignOwn = (L, raw) => { const mine = ownLines(raw); let i = 0; return L.lines.map(l => l.text ? (mine[i++] || '') : ''); };
+  const saveOwn = async (x, field, raw) => {
+    const o = { ...(OWN[x.k] || {}) }; if (raw && raw.trim()) o[field] = raw; else delete o[field];
+    if (Object.keys(o).length) { OWN[x.k] = o; try { await local.set({ ['own_' + x.k]: o }); } catch (err) {} }
+    else { delete OWN[x.k]; try { await local.remove('own_' + x.k); } catch (err) {} }
+  };
+  // your per-song romaji fixes, like shintai -> karada (whole words, any case)
+  const applyFixes = (x, lines) => {
+    const fx = (x.rf || []).filter(f => f && f[0]);
+    if (!fx.length) return lines;
+    return lines.map(t => fx.reduce((s, [a, b]) => s.replace(new RegExp('(^|[^a-z])' + a.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=$|[^a-z])', 'gi'), (m, p) => p + b), t || ''));
+  };
   const working = new Set(), failed = {};
   const srcLang = lines => { const t = lines.map(l => l.text).join(''); return /[぀-ヿ]/.test(t) ? 'ja' : /[가-힯]/.test(t) ? 'ko' : /[一-鿿]/.test(t) ? 'zh' : null; };
   const extraFor = (x, mode) => {                  // the romaji/English lines for this song, or null while being prepared
     const L = lyricsFor(x); if (!L || !L.synced || mode === 'next') return null;
-    const h = hashOf(LY[x.k].raw + '|' + (x.tt ? x.tt.join(',') : '')), t = TR[x.k];
     const field = mode === 'romaji' ? 'ro' : 'en';
-    if (t && t.h === h && t[field]) return t[field];
+    if (OWN[x.k] && OWN[x.k][field]) return alignOwn(L, OWN[x.k][field]);    // your own romaji/English wins
+    const h = hashOf(LY[x.k].raw + '|' + (x.tt ? x.tt.join(',') : '')), t = TR[x.k];
+    // saved romaji/English made by an older version are made again (romaji v2: song readings like karada; English v2: with context)
+    if (t && t.h === h && t[field] && (field === 'ro' ? t.rov === 2 : t.env === 2)) return field === 'ro' ? applyFixes(x, t[field]) : t[field];
     prepareExtra(x, mode, L, h);
     return null;
   };
@@ -246,13 +263,22 @@
           if (av !== 'available') say('Downloading Edge\'s translation model… (only needed once)');
           const tr = await Translator.create({ ...opts, monitor(m) { m.addEventListener('downloadprogress', e => say('Downloading Edge\'s translation model… ' + Math.round((e.loaded || 0) * 100) + '%')); } });
           say('Translating lyrics…');
-          const memo = {}; out = [];
-          for (const l of L.lines) out.push(l.text ? (memo[l.text] = memo[l.text] || await tr.translate(l.text)) : '');
+          // translate in blocks of lines so the translator sees the context; if a block doesn't come back
+          // with the same number of lines, translate that block line by line instead
+          const memo = {}; out = L.lines.map(() => '');
+          const idx = L.lines.map((l, i) => l.text ? i : -1).filter(i => i >= 0);
+          for (let b = 0; b < idx.length; b += 16) {
+            const part = idx.slice(b, b + 16), src = part.map(i => L.lines[i].text);
+            let got = null;
+            try { const r = await tr.translate(src.join('\n')); const lines = String(r).split(/\r?\n/).map(s => s.trim()); if (lines.length === src.length && lines.every(Boolean)) got = lines; } catch (err) {}
+            if (!got) { got = []; for (const s of src) got.push(memo[s] = memo[s] || await tr.translate(s)); }
+            part.forEach((i, j) => { out[i] = got[j]; });
+          }
           try { tr.destroy && tr.destroy(); } catch (err) {}
         }
       }
       const t = TR[x.k] && TR[x.k].h === h ? TR[x.k] : { h };
-      t[mode === 'romaji' ? 'ro' : 'en'] = out; TR[x.k] = t;
+      t[mode === 'romaji' ? 'ro' : 'en'] = out; if (mode === 'romaji') t.rov = 2; else t.env = 2; TR[x.k] = t;
       try { await local.set({ ['tr_' + x.k]: t }); } catch (err) {}
       say(mode === 'romaji' ? 'Romaji ready.' : 'English translation ready.');
       updateOverlay(true);
@@ -324,6 +350,8 @@
     close: 'M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z',
     shrink: 'M5 11h14v2H5z', expand: 'M21 11V3h-8l3.29 3.29-10 10L3 13v8h8l-3.29-3.29 10-10z',
     check: 'M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z',
+    movie: 'M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z',
+    search: 'M15.5 14h-.79l-.28-.27A6.47 6.47 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z',
     grip: 'M11 18c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2zm-2-8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0-6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm6 4c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z',
     boxOff: 'M19 5v14H5V5h14m0-2H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2z',
     boxOn: 'M19 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.11 0 2-.9 2-2V5c0-1.1-.89-2-2-2zm-9 14l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z',
@@ -559,6 +587,20 @@
   .act.danger:hover{background:rgba(244,166,193,.14);color:#F4A6C1}
   .picker{margin-top:8px;padding:8px;border-radius:10px;background:#1E1E24}
   .pkrow.part{color:#A6D8F0}
+  .searchbox{display:flex;align-items:center;gap:6px;height:36px;margin:8px 0 2px;padding:0 4px 0 10px;border-radius:10px;background:#25242c;border:1px solid #3a3842}
+  .searchbox:focus-within{border-color:#A6D8F0}
+  .sic svg{width:18px;height:18px;fill:#8e8b98;display:block}
+  .sinput{flex:1;min-width:0;height:100%;border:0;background:transparent;color:#F2F4F8;font:inherit;font-size:13px;outline:none}
+  .nstimes{display:flex;align-items:center;gap:8px;margin:8px 0}
+  .nstime{display:flex;flex-direction:column;min-width:64px;padding:6px 10px;border-radius:10px;background:#25242c}
+  .nstime .nslab{font-size:11px;color:#8e8b98}.nstime b{font-size:16px;color:#8e8b98;font-variant-numeric:tabular-nums}.nstime.set b{color:#F2F4F8}
+  .nslen{font-size:12px;color:#A6D8F0;margin-left:auto}
+  .marks .pill.full{grid-column:1 / -1}.pill.wide{width:100%;margin-top:8px;justify-content:center}
+  .ownsec{margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.08)}
+  .fixes{margin-top:6px}.fixrow{display:flex;align-items:center;gap:6px;margin-top:4px}
+  .fixword{font-size:13px;color:#F2F4F8;background:#25242c;border-radius:6px;padding:3px 8px}.fixarrow{color:#8e8b98}
+  .fixin{width:88px;height:28px;box-sizing:border-box;padding:0 8px;border-radius:8px;border:1px solid #3a3842;background:#25242c;color:#F2F4F8;font:inherit;font-size:13px}
+  .fixin:focus{outline:2px solid #A6D8F0;outline-offset:-1px}
   .pllist{display:flex;flex-direction:column}
   .draghandle{cursor:grab;touch-action:none;color:#bdbac6;flex:none;width:28px;margin-right:-4px}.draghandle:active{cursor:grabbing}
   .pllist.sorting{user-select:none}.pllist.sorting .song:not(.dragging){transition:transform .12s}
@@ -777,6 +819,20 @@
   let pickStream = null, selecting = null, pickSel = false;     // add a whole stream / selected songs to a playlist
   const endSelect = () => { selecting = null; pickSel = false; };
   let dragging = false, keepFocus = null;
+  let songQuery = '', plQuery = '', searchFocus = null;      // search on the Songs tab and inside a playlist
+  const norm = t => String(t || '').normalize('NFKC').toLowerCase();
+  const searchBox = (val, label, set) => {
+    const wrap = el('div', 'searchbox');
+    const ic = el('span', 'sic'); ic.append(icon('search'));
+    const inp = el('input', 'sinput'); inp.type = 'text'; inp.value = val; inp.placeholder = label; inp.setAttribute('aria-label', label);
+    const apply = () => { searchFocus = { cls: label, pos: inp.selectionStart }; set(inp.value); draw(); };
+    inp.oninput = ev => { if (!ev.isComposing) apply(); };          // Japanese input: wait until the word is confirmed
+    inp.addEventListener('compositionend', apply);
+    inp.onkeydown = ev => { if (ev.key === 'Escape' && inp.value) { ev.preventDefault(); searchFocus = { cls: label, pos: 0 }; set(''); draw(); } };
+    wrap.append(ic, inp);
+    if (val) { const c = ibtn('close', 'Clear search', () => { searchFocus = { cls: label, pos: 0 }; set(''); draw(); }, 'sm'); wrap.append(c); }
+    return wrap;
+  };
   // drag a song by its handle to a new place in the playlist (mouse or touch)
   const startDrag = (ev, handle, list, x, done) => {
     if (ev.button > 0) return;
@@ -914,7 +970,12 @@
       scroll.append(c);
     }
     if (ui.tab === 'pl') drawPlaylists(); else if (ui.tab === 'settings') drawSettings(); else if (ui.tab === 'welcome') drawWelcome(); else drawSongs();
-    if (shownTab !== ui.tab) { scroll.scrollTop = 0; shownTab = ui.tab; }
+    if (shownTab !== ui.tab) { scroll.scrollTop = 0; if (shownTab !== null) { songQuery = plQuery = ''; } shownTab = ui.tab; }
+    if (searchFocus) {                                 // keep typing in the search box after the list redraws
+      const f = searchFocus; searchFocus = null;
+      const inp = [...scroll.querySelectorAll('.sinput')].find(i => i.getAttribute('aria-label') === f.cls);
+      if (inp) { inp.focus(); try { inp.setSelectionRange(f.pos, f.pos); } catch (err) {} }
+    }
     if (reveal) { const t = scroll.querySelector(reveal); reveal = null; if (t) { const d = t.getBoundingClientRect().top - scroll.getBoundingClientRect().top - (scroll.clientHeight - t.offsetHeight) / 2; scroll.scrollTo({ top: scroll.scrollTop + d, behavior: 'smooth' }); panel.scrollTop = 0; } }
   };
 
@@ -1140,6 +1201,64 @@
       list.append(tbtn('act', 'close', 'Cancel', () => { searchFor = null; found = []; say(''); draw(); }));
       box.append(list);
     }
+    if (L && L.lines.some(l => l.text)) {
+      const own = OWN[x.k] || {}, jp = L.lines.some(l => /[぀-ヿ一-鿿]/.test(l.text));
+      const sec = el('div', 'ownsec');
+      sec.append(el('div', 'tlabel', 'Romaji and English'));
+      const note = [];
+      if (own.ro) note.push('Using your romaji (' + ownLines(own.ro).length + ' lines).');
+      if (own.en) note.push('Using your English (' + ownLines(own.en).length + ' lines).');
+      if (!note.length) note.push('Made automatically. Paste your own to get them exactly right.');
+      sec.append(el('div', 'setnote', note.join(' ')));
+      const acts = el('div', 'acts');
+      if (jp) acts.append(tbtn('act' + (ownFor === x.k + ':ro' ? ' on' : ''), 'edit', own.ro ? 'Edit your romaji' : 'Paste romaji', () => { ownFor = ownFor === x.k + ':ro' ? null : x.k + ':ro'; draw(); }));
+      acts.append(tbtn('act' + (ownFor === x.k + ':en' ? ' on' : ''), 'edit', own.en ? 'Edit your English' : 'Paste English', () => { ownFor = ownFor === x.k + ':en' ? null : x.k + ':en'; draw(); }));
+      sec.append(acts);
+      const which = ownFor && ownFor.startsWith(x.k + ':') ? ownFor.slice(x.k.length + 1) : null;
+      if (which) {
+        const ta = el('textarea', 'paste');
+        ta.placeholder = 'Paste the ' + (which === 'ro' ? 'romaji' : 'English') + ', one line per lyric line, in the same order.';
+        ta.setAttribute('aria-label', which === 'ro' ? 'Your romaji' : 'Your English');
+        ta.value = own[which] || '';
+        const want = L.lines.filter(l => l.text).length;
+        const cnt = el('div', 'setnote');
+        const upd = () => { const n = ownLines(ta.value).length; cnt.textContent = n + ' of ' + want + ' lines' + (n && n !== want ? ' — they\'re matched in order, so check the end.' : '.'); };
+        ta.oninput = upd; upd();
+        const row = el('div', 'acts');
+        row.append(tbtn('act primary', 'check', 'Save', async () => {
+          await saveOwn(x, which, ta.value); ownFor = null;
+          say(ta.value.trim() ? 'Saved. Your ' + (which === 'ro' ? 'romaji' : 'English') + ' shows on the video now.' : 'Cleared.'); updateOverlay(true); draw();
+        }), tbtn('act', 'close', 'Cancel', () => { ownFor = null; draw(); }));
+        if (own[which]) row.append(tbtn('act danger', 'trash', 'Use automatic', async () => { await saveOwn(x, which, ''); ownFor = null; say('Back to automatic ' + (which === 'ro' ? 'romaji.' : 'English.')); updateOverlay(true); draw(); }));
+        sec.append(ta, cnt, row);
+      }
+      if (jp && !own.ro) {                         // fix single words in the automatic romaji
+        const fx = el('div', 'fixes');
+        fx.append(el('div', 'setnote', 'Fix a word in the automatic romaji (for this song):'));
+        (x.rf || []).forEach((f, i) => {
+          const r = el('div', 'fixrow');
+          const rm = ibtn('close', 'Remove the fix ' + f[0] + ' to ' + f[1], async () => {
+            const before = (x.rf || []).map(y => y.slice()); x.rf.splice(i, 1); if (!x.rf.length) delete x.rf; await put(x);
+            say('Fix removed.', async () => { x.rf = before; await put(x); updateOverlay(true); }); updateOverlay(true); draw();
+          }, 'sm rmx');
+          r.append(el('span', 'fixword', f[0]), el('span', 'fixarrow', '→'), el('span', 'fixword', f[1]), rm);
+          fx.append(r);
+        });
+        const add = el('div', 'fixrow');
+        const a = el('input', 'fixin'); a.type = 'text'; a.placeholder = 'shintai'; a.setAttribute('aria-label', 'Word in the romaji');
+        const b = el('input', 'fixin'); b.type = 'text'; b.placeholder = 'karada'; b.setAttribute('aria-label', 'Replace with');
+        const go = async () => {
+          const f = a.value.trim(), t = b.value.trim(); if (!f || !t) { say('Type the word as it shows, and what it should be.'); return; }
+          x.rf = (x.rf || []).filter(y => y[0].toLowerCase() !== f.toLowerCase()).concat([[f, t]]); await put(x);
+          say('Fixed: ' + f + ' → ' + t + '.'); updateOverlay(true); draw();
+        };
+        b.onkeydown = ev => { if (ev.key === 'Enter') { ev.preventDefault(); go(); } };
+        add.append(a, el('span', 'fixarrow', '→'), b, tbtn('act', 'plus', 'Add', go));
+        fx.append(add);
+        sec.append(fx);
+      }
+      box.append(sec);
+    }
     if (pasteFor === x.k) {
       const ta = el('textarea', 'paste'); ta.placeholder = 'Paste lyrics here. Lines starting with timings like [01:23.45] will be synced.';
       ta.setAttribute('aria-label', 'Lyrics text');
@@ -1156,6 +1275,7 @@
     return box;
   };
 
+  let ownFor = null;                                // 'songKey:ro' / 'songKey:en' while pasting your own romaji/English
   let incoming = null;                              // a playlist someone shared with you, waiting for your OK
   let welcomed = true;                               // set from storage at start
   const finishWelcome = tab => { welcomed = true; local.set({ welcomed: true }).catch(() => {}); ui.tab = ui.lastTab = tab || 'songs'; saveUi(); draw(); };
@@ -1385,23 +1505,30 @@
       const top = el('div', 'nshead'); top.append(el('b', '', 'New song'), el('span', 'grow'), ibtn('close', 'Cancel new song', () => cancelCreate(), 'sm'));
       const step = (n, done, text) => { const d = el('div', 'nsstep' + (done ? ' done' : '')); d.append(el('span', 'nsnum', done ? '✓' : String(n)), el('span', '', text)); return d; };
       createNow = el('span', 'nsnow');
+      const len = mark != null && markE != null && markE > mark ? fmt(markE - mark) + ' long' : null;
+      const show = el('div', 'nstimes');
+      const cell = (lab, t) => { const d = el('div', 'nstime' + (t != null ? ' set' : '')); d.append(el('span', 'nslab', lab), el('b', '', t != null ? fmt(t) : '—')); return d; };
+      show.append(cell('Start', mark), cell('End', markE), el('div', 'nslen', len || ''));
       const marks = el('div', 'marks');
-      marks.append(
-        tbtn('pill' + (mark != null ? ' armed' : ''), 'markIn', mark != null ? 'Start ' + fmt(mark) : 'Mark start', markStart),
-        tbtn('pill primary', 'markOut', 'Mark end + save', markEnd));
-      marks.children[0].title = 'Shortcut: ['; marks.children[1].title = 'Shortcut: ]';
-      if (mark == null) marks.children[1].disabled = true;
-      const foot = el('div', 'nsfoot'); foot.append('Video is at ', createNow, ' · keys [ and ] work too');
-      c.append(top, step(1, mark != null, mark != null ? 'Start marked at ' + fmt(mark) : 'Drag the video to where the song starts, then Mark start.'),
-        step(2, false, 'Drag to where it ends, then Mark end + save.'), marks, foot);
+      marks.append(tbtn('pill', 'markIn', 'Mark start', markStart), tbtn('pill', 'markOut', 'Mark end', markEnd), tbtn('pill full', 'movie', 'Full video', markFull));
+      marks.children[0].title = 'Set the start to where the video is now (shortcut: [)';
+      marks.children[1].title = 'Set the end to where the video is now (shortcut: ])';
+      marks.children[2].title = 'Start at 0:00 and end at the end of the video';
+      const save = tbtn('pill primary wide', 'check', 'Save', saveMarked);
+      save.disabled = !(mark != null && markE != null && markE > mark);
+      const foot = el('div', 'nsfoot'); foot.append('Video is at ', createNow, ' · keys [ and ] mark start and end');
+      c.append(top, show, marks, save, foot);
       scroll.append(c);
       updateCreateNow();
     } else if (vidNow() && !selecting) {
       const add = tbtn('newbtn', 'plus', 'New song', () => startCreate()); add.title = 'Add a song from this stream (shortcut: [)';
       scroll.append(add);
     }
-    const songs = Object.values(S);
-    if (!songs.length) { endSelect(); if (!creating) scroll.append(empty('note', vidNow() ? 'No songs yet. Press New song to save one from this stream.' : 'No songs yet. Open a stream to start.')); return; }
+    const every = Object.values(S), qv = norm(songQuery.trim());
+    const songs = qv ? every.filter(x => norm(x.n).includes(qv) || norm(x.t).includes(qv)) : every;
+    if (!creating && (every.length > 8 || songQuery)) scroll.append(searchBox(songQuery, 'Search songs and streams', v => { songQuery = v; }));
+    if (!songs.length && every.length) { scroll.append(empty('search', 'No songs match “' + songQuery.trim() + '”.')); return; }
+    if (!songs.length) { endSelect(); if (!creating) scroll.append(empty('note', vidNow() ? 'No songs yet. Press New song to save part of this video, or the whole video as one song.' : 'No songs yet. Open a stream to start.')); return; }
     const here = vidNow(), groups = {};
     songs.forEach(x => { (groups[x.v] = groups[x.v] || []).push(x); });
     const order = Object.keys(groups).sort((a, b) => (a === here ? -1 : b === here ? 1 : (groups[a][0].t || '').localeCompare(groups[b][0].t || '')));
@@ -1413,9 +1540,10 @@
           tbtn('chip', selecting.size === allKeys.length ? 'boxOff' : 'boxOn', selecting.size === allKeys.length ? 'Select none' : 'Select all', () => {
             if (selecting.size === allKeys.length) selecting.clear(); else allKeys.forEach(k => selecting.add(k)); draw(); }));
       } else {
-        bar.append(tbtn('chip', 'play', 'Play all', () => playList(allKeys, { sh: false, r: 1, g: 0 }, 'All songs')),
-          tbtn('chip', 'shuffle', 'Shuffle all', () => { const mine = here && groups[here] ? groups[here] : null;   // start with a song on this stream: no switch first
-            playList(allKeys, { sh: true, r: 1, g: 0 }, 'All songs', null, mine ? mine[Math.floor(Math.random() * mine.length)].k : null); }),
+        const nm = qv ? 'Search “' + songQuery.trim() + '”' : 'All songs';
+        bar.append(tbtn('chip', 'play', qv ? 'Play ' + allKeys.length + (allKeys.length === 1 ? ' result' : ' results') : 'Play all', () => playList(allKeys, { sh: false, r: 1, g: 0 }, nm)),
+          tbtn('chip', 'shuffle', qv ? 'Shuffle results' : 'Shuffle all', () => { const mine = here && groups[here] ? groups[here] : null;   // start with a song on this stream: no switch first
+            playList(allKeys, { sh: true, r: 1, g: 0 }, nm, null, mine ? mine[Math.floor(Math.random() * mine.length)].k : null); }),
           el('span', 'grow'),
           tbtn('chip', 'boxOn', 'Select', () => { selecting = new Set(); pickSel = false; pickStream = null; openSong = null; chooserFor = null; draw(); }));
       }
@@ -1426,7 +1554,7 @@
       const t = (list.find(x => x.t) || {}).t || 'Video ' + v;
       const g = el('div', 'group');
       const gh = el('div', 'ghead');
-      const isC = collapsed.has(v);
+      const isC = collapsed.has(v) && !qv;          // searching opens every stream with matches
       const tog = () => { if (isC) collapsed.delete(v); else collapsed.add(v); draw(); };
       const title = el('div', 'gtitle'); title.title = t;
       if (v === here) title.append(el('span', 'here', 'Now watching'));
@@ -1494,10 +1622,14 @@
       tbtn('chip' + (p.sh ? ' on' : ''), 'shuffle', p.sh ? 'Shuffle on' : 'Shuffle off', async () => { p.sh = !p.sh; await put(p); draw(); }),
       cyc('r', [1, 2, 3], 'loop', v => 'Play each ' + v + '×'),
       cyc('g', [0, 2, 5], 'timer', v => v ? v + 's gap' : 'No gap'));
-    const songs = p.list.map(k => S[k]).filter(Boolean);
+    const allSongs = p.list.map(k => S[k]).filter(Boolean), pq = norm(plQuery.trim());
+    const songs = pq ? allSongs.filter(x => norm(x.n).includes(pq) || norm(x.t).includes(pq)) : allSongs;
     opts.append(el('span', 'grow'), tbtn('chip' + (plEdit ? ' on' : ''), plEdit ? 'check' : 'edit', plEdit ? 'Done' : 'Edit list', () => { plEdit = !plEdit; draw(); }));
     scroll.append(opts, tbtn('playall', 'play', 'Play ' + p.n, () => playList(p.list, p, p.n, p.k)));
-    if (!songs.length) { scroll.append(empty('plAdd', 'This playlist is empty. On the Songs tab, open a song\'s options and choose Add to playlist.')); return; }
+    if (!allSongs.length) { scroll.append(empty('plAdd', 'This playlist is empty. On the Songs tab, open a song\'s options and choose Add to playlist.')); return; }
+    if (allSongs.length > 10 || plQuery) scroll.append(searchBox(plQuery, 'Search this playlist', v => { plQuery = v; }));
+    if (!songs.length) { scroll.append(empty('search', 'No songs in ' + p.n + ' match “' + plQuery.trim() + '”.')); return; }
+    if (pq && plEdit) scroll.append(el('div', 'setnote', 'Clear the search to drag songs into a new order.'));
     // save a new order of the shown songs (songs that no longer exist keep their place at the end)
     const reorder = async (keys, moved) => {
       const before = [...p.list];
@@ -1527,9 +1659,9 @@
         }, 'sm rmx');
         rm.title = 'Remove from this playlist (the song stays saved)';
         extra.push(rm);
-        lead = h;
+        if (!pq) lead = h;                          // no dragging while the list is filtered
       }
-      list.append(songRow(x, { num: i + 1, lead, onPlay: () => playList(p.list, p, p.n, p.k, x.k), pl: extra }));
+      list.append(songRow(x, { num: allSongs.indexOf(x) + 1, lead, onPlay: () => playList(p.list, p, p.n, p.k, x.k), pl: extra }));
     });
     scroll.append(list);
     if (keepFocus && Date.now() < keepFocus.until) {      // keep the keyboard on the moved song's handle, even across redraws
@@ -1559,36 +1691,97 @@
     ctl.prepend(b);
   };
 
+  // "Save to Saine Wave" under the video, in YouTube's row of buttons (Like, Share, ...)
+  let saveBtn = null;
+  const syncSaveBtn = () => {
+    if (!saveBtn) return;
+    const had = wholeOf(), live = (() => { const v = V(); return v && !Number.isFinite(v.duration); })();
+    saveBtn.style.display = live ? 'none' : 'inline-flex';
+    const label = had ? 'Saved in Saine Wave (click to open it)' : 'Save to Saine Wave (whole video as one song)';
+    saveBtn.title = label; saveBtn.setAttribute('aria-label', label);
+    saveBtn.style.background = 'rgba(255,255,255,.1)';
+    const mark = saveBtn.querySelector('.sw-mark'), wave = saveBtn.querySelector('.sw-wave');
+    mark.setAttribute('stroke', had ? '#F5C84C' : '#A6D8F0'); mark.setAttribute('fill', had ? '#F5C84C' : 'none');
+    wave.setAttribute('stroke', had ? '#1E1E24' : '#F2F4F8');
+  };
+  const addSaveButton = () => {
+    if (location.pathname !== '/watch') return;
+    const row = q('ytd-watch-metadata #top-level-buttons-computed') || q('#top-level-buttons-computed');
+    if (!row) return;
+    if (saveBtn && row.contains(saveBtn)) { syncSaveBtn(); return; }
+    const b = el('button', 'saine-wave-save'); b.type = 'button';
+    b.style.cssText = 'display:inline-flex;align-items:center;justify-content:center;flex:none;width:36px;height:36px;margin-left:8px;padding:0;border:0;border-radius:50%;cursor:pointer;background:rgba(255,255,255,.1)';
+    // YouTube's Save bookmark with Saine Wave's wave inside; the bookmark fills in once saved
+    const s2 = document.createElementNS(NS, 'svg'); s2.setAttribute('viewBox', '0 0 24 24'); s2.setAttribute('width', '24'); s2.setAttribute('height', '24');
+    s2.style.cssText = 'display:block;flex:none';
+    const mk = (d, cls) => { const e = document.createElementNS(NS, 'path'); e.setAttribute('d', d); e.setAttribute('class', cls);
+      e.setAttribute('fill', 'none'); e.setAttribute('stroke-width', '2'); e.setAttribute('stroke-linecap', 'round'); e.setAttribute('stroke-linejoin', 'round'); return e; };
+    s2.append(mk('M6.5 3.5h11a1 1 0 0 1 1 1v16.2l-6.5-4.3-6.5 4.3V4.5a1 1 0 0 1 1-1z', 'sw-mark'), mk('M8.6 10.6c1-2.9 2.4-2.9 3.4 0s2.4 2.9 3.4 0', 'sw-wave'));
+    b.append(s2);
+    b.onmouseenter = () => { b.style.filter = 'brightness(1.6)'; }; b.onmouseleave = () => { b.style.filter = ''; };
+    b.onclick = ev => { ev.stopPropagation(); saveWhole(); };
+    row.append(b); saveBtn = b; syncSaveBtn();
+  };
+
   // ---------- marking ----------
-  let mark = null, markVid = null;                    // the start mark belongs to one stream
+  let mark = null, markE = null, markVid = null;        // start/end marks belong to one video                    // the start mark belongs to one stream
   let creating = false, createNow = null;
   const updateCreateNow = () => { const v = V(); if (createNow && v) createNow.textContent = fmt(v.currentTime); };
   const startCreate = () => {
     if (!vidNow()) { say('Open a stream first.'); return; }
     if (P) stop(null);
-    creating = true; mark = null; openSong = null; ui.tab = 'songs'; ui.min = false; say(''); toggle(true); draw();
+    creating = true; mark = markE = null; openSong = null; ui.tab = 'songs'; ui.min = false; say(''); toggle(true); draw();
   };
-  const cancelCreate = () => { creating = false; mark = null; say(''); draw(); };
+  const cancelCreate = () => { creating = false; mark = markE = null; say(''); draw(); };
   const markStart = () => {
     const v = V(); if (!v || !vidNow()) { say('Open a video first.'); return; }
     if (adOn()) { creating = true; ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say(AD_WAIT); return; }
     if (P) stop(null);
+    if (markVid && markVid !== vidNow()) markE = null;
     creating = true; mark = v.currentTime; markVid = vidNow(); ui.tab = 'songs'; ui.min = false; toggle(true);
-    say(''); draw();
+    say(markE != null && markE <= mark ? 'The start is after the end. Mark the end again.' : ''); draw();
   };
-  const markEnd = async () => {
-    const v = V(); if (!v) return;
+  const markEnd = () => {
+    const v = V(); if (!v || !vidNow()) { say('Open a video first.'); return; }
+    if (adOn()) { creating = true; ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say(AD_WAIT); return; }
+    if (markVid && markVid !== vidNow()) mark = null;
+    creating = true; markE = v.currentTime; markVid = vidNow(); ui.tab = 'songs'; ui.min = false; toggle(true);
+    say(mark != null && markE <= mark ? 'The end must be after the start (' + fmt(mark) + ').' : ''); draw();
+  };
+  const markFull = () => {
+    const v = V(); if (!v || !vidNow()) { say('Open a video first.'); return; }
     if (adOn()) { say(AD_WAIT); return; }
-    if (mark != null && markVid !== vidNow()) { mark = null; markVid = null; creating = true; ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say('The start was marked on a different stream. Mark the start again on this one.'); return; }
-    if (mark == null) { creating = true; ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say('Mark the start first.'); return; }
-    const e = v.currentTime;
-    if (e <= mark) { say('The end must be after the start (' + fmt(mark) + ').'); return; }
-    const n = prompt('Name this song', 'Song ' + (Object.keys(S).length + 1));
+    if (!Number.isFinite(v.duration) || !v.duration) { say('This video has no fixed length (it may be live). Mark the start and end instead.'); return; }
+    creating = true; mark = 0; markE = Math.floor(v.duration * 10) / 10; markVid = vidNow(); say(''); draw();
+  };
+  const saveMarked = async () => {
+    if (markVid !== vidNow()) { mark = markE = null; say('These marks were made on a different video. Mark them again on this one.'); draw(); return; }
+    if (mark == null || markE == null) { say('Mark the start and the end first.'); return; }
+    if (markE <= mark) { say('The end must be after the start (' + fmt(mark) + ').'); return; }
+    const whole = mark < 1 && (() => { const v = V(); return v && Number.isFinite(v.duration) && Math.abs(markE - v.duration) < 2; })();
+    const n = prompt('Name this song', whole ? videoTitle() : 'Song ' + (Object.keys(S).length + 1));
     if (n === null) return;
-    const x = await addSong(vidNow(), n.trim() || 'Song', mark, e, videoTitle());
-    mark = null; creating = false; openSong = x.k; ui.tab = 'songs'; toggle(true);
+    const x = await addSong(vidNow(), n.trim() || 'Song', mark, markE, videoTitle());
+    mark = markE = null; creating = false; openSong = x.k; ui.tab = 'songs'; toggle(true);
     say('Saved ' + x.n + ' (' + fmt(x.s) + ' → ' + fmt(x.e) + ').', async () => { await deleteSong(x); openSong = null; say('New song removed.'); });
-    draw();
+    draw(); syncSaveBtn();
+  };
+
+  // the whole video as one song (music videos, covers): 0:00 to the end
+  const wholeOf = () => { const v = V(), here = vidNow(); return v && here && Object.values(S).find(x => x.v === here && x.s < 1 && Number.isFinite(v.duration) && Math.abs(x.e - v.duration) < 2); };
+  const saveWhole = async () => {
+    const v = V(), here = vidNow();
+    if (!v || !here) { say('Open a video first.'); return; }
+    if (adOn()) { toggle(true); say(AD_WAIT); return; }
+    if (!Number.isFinite(v.duration) || !v.duration) { ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say('This video has no fixed length (it may be live). Use New song to mark the start and end.'); return; }
+    const had = wholeOf();
+    if (had) { openSong = had.k; ui.tab = 'songs'; ui.min = false; toggle(true); draw(); say('This video is already saved as ' + had.n + '.'); return; }
+    const n = prompt('Name this song', videoTitle() || 'Song ' + (Object.keys(S).length + 1));
+    if (n === null) return;
+    const x = await addSong(here, n.trim() || 'Song', 0, Math.floor(v.duration * 10) / 10, videoTitle());
+    mark = null; creating = false; openSong = x.k; ui.tab = 'songs'; ui.min = false; toggle(true);
+    say('Saved ' + x.n + ' (whole video, ' + fmt(x.e) + ').', async () => { await deleteSong(x); openSong = null; say('Song removed.'); });
+    draw(); syncSaveBtn();
   };
 
   // ---------- playback ----------
@@ -1596,6 +1789,11 @@
   let P = null, last = -1, waiting = null;
   const PLAY_KEY = 'saineWavePlay';
   const cur = () => P && S[P.list[P.i]];
+  const inMix = () => location.pathname === '/watch' && new URLSearchParams(location.search).has('list');   // a YouTube Mix or playlist
+  // songs that end at the very end of the video end a little early, so YouTube's Autoplay can't jump in first
+  const endOf = (x, v) => Number.isFinite(v.duration) && v.duration > 0 && x.e > v.duration - 0.6 ? Math.max(x.s + 0.5, v.duration - 0.6) : x.e;
+  let endedNow = false;
+  document.addEventListener('ended', ev => { if (ev.target === V() && P && !waiting) { endedNow = true; tick(); } }, true);
   const seek = (v, t) => { v.currentTime = t; last = t; };
   const whenReady = (fn, tries = 0) => {
     const v = V();
@@ -1612,15 +1810,18 @@
     const x = cur(); if (!x) { nextSong(true); return; }
     const r = P.resume;
     const from = r && r.k === x.k && r.t >= x.s && r.t < x.e - 1 ? r.t : x.s;
-    if (x.v !== vidNow()) {                     // song is in another video: open it, then carry on
+    const mix = x.v === vidNow() && inMix();
+    if (x.v !== vidNow() || mix) {              // song is in another video (or this one inside a Mix): open it, then carry on
+      if (mix) P.note = 'mix';
       sessionStorage.setItem(PLAY_KEY, JSON.stringify(P));
-      say('Opening ' + x.n + '…');
+      say(mix ? 'Leaving the YouTube Mix so Saine Wave can loop this song…' : 'Opening ' + x.n + '…');
       location.href = link(x, from);            // opens at the exact second (song start, or where it stopped)
       return;
     }
     delete P.resume;
     draw();                                     // show the song right away, even while the video is still loading
-    whenReady(v => { seek(v, from); v.play().catch(() => {}); say(''); draw(); });
+    const note = P.note; delete P.note;
+    whenReady(v => { seek(v, from); v.play().catch(() => {}); say(note === 'mix' ? 'Left the YouTube Mix so Saine Wave can loop this song.' : ''); draw(); });
   };
   const playOne = x => { clearTimeout(waiting); waiting = null; P = { mode: 'one', list: [x.k], i: 0, rep: 1, r: 1, g: 0 }; start(); };
   const playList = (keys, o, name, plk, from) => {
@@ -1678,8 +1879,10 @@
     last = t;
     if (t >= x.s && t < x.e) P.at = { k: x.k, t };      // where it is, so Play can continue here after leaving the stream
     if (jumped && (t < x.s - 1 || t > x.e)) { stop('Loop paused because you moved the slider.'); return; }
-    if (t >= x.e && SY && SY.k === x.k) { v.pause(); syncFinish(); return; }
-    if (t >= x.e) {
+    const e = endOf(x, v), atEnd = t >= e || endedNow; endedNow = false;
+    if (atEnd && SY && SY.k === x.k) { v.pause(); syncFinish(); return; }
+    if (atEnd) {
+      if (v.ended) setTimeout(() => { if (P && cur() === x) v.play().catch(() => {}); }, 0);   // the video stopped at its end: start it again
       const rp = ui.rp || 'all';
       if (P.mode === 'one') { if (rp === 'off') { finishPlayback(v, 'Finished ' + x.n + '.'); return; } seek(v, x.s); }
       else if (rp === 'one') seek(v, x.s);
@@ -1712,9 +1915,9 @@
     handled = location.href;
     if (isOpen()) draw();
     const here = vidNow();
-    if (mark != null && markVid !== here) {               // a start marked on another stream can't be used here
-      mark = null; markVid = null;
-      if (creating) { say('You opened a different stream, so the start mark was cleared. Mark the start again here.'); if (isOpen()) draw(); }
+    if ((mark != null || markE != null) && markVid !== here) {   // marks made on another video can't be used here
+      mark = markE = null; markVid = null;
+      if (creating) { say('You opened a different video, so the marks were cleared. Mark them again here.'); if (isOpen()) draw(); }
     }
     if (!here) return;
     let pending = null;                                   // 1) a playlist opened this video
@@ -1747,6 +1950,7 @@
     }
     const x = cur();                                      // 3) moved to another video: stop quietly
     if (P && x && x.v !== here) stop(null);
+    else if (P && x && inMix()) stop('A YouTube Mix started, so Saine Wave stopped its loop.');   // 4) a Mix took over this video
   };
 
   chrome.runtime.onMessage.addListener(m => { if (m && m.t === 'toggle') toggle(); });
@@ -1759,7 +1963,7 @@
   addEventListener('resize', () => { if (isOpen()) place(); });
   document.addEventListener('play', syncPP, true); document.addEventListener('pause', syncPP, true);
   setInterval(tick, 200);
-  setInterval(addPlayerButton, 1500);
+  setInterval(() => { addPlayerButton(); addSaveButton(); }, 1500);
 
   (async () => {
     try { const r = await local.get('ui'); if (r && r.ui) ui = { ...ui, ...r.ui }; } catch (err) {}
